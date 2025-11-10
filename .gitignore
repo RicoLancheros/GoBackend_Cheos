@@ -1,0 +1,79 @@
+# Binaries for programs and plugins
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+backend
+backend.exe
+nul
+
+# Test binary, built with `go test -c`
+*.test
+
+# Output of the go coverage tool
+*.out
+
+# Go workspace file
+go.work
+
+# Dependency directories
+vendor/
+
+# Environment variables
+.env
+.env.local
+.env.production
+
+# Firebase credentials (IMPORTANTE - NO SUBIR AL REPOSITORIO)
+firebase-credentials.json
+*-firebase-adminsdk-*.json
+serviceAccountKey.json
+
+# IDE specific files
+.vscode/
+.idea/
+.claude/
+*.swp
+*.swo
+*~
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# Build output
+/bin/
+/build/
+/dist/
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+tmp/
+temp/
+
+# Database
+*.db
+*.sqlite
+*.sqlite3
+
+# Air (hot reload)
+tmp/
+.air.toml
+
+# Coverage
+coverage.txt
+coverage.html
+
+# Documentation files (except README.md)
+DEPLOYMENT.md
+SETUP_GUIDE.md
+ARQUITECTURA_DEPLOYMENT.md
+Arquitectura.md
+Contexto.md
+ConexionFirebase.md
+Endpoints_Test.md
+.claude

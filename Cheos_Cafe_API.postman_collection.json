@@ -1,0 +1,942 @@
+{
+	"info": {
+		"_postman_id": "cheos-cafe-backend-001",
+		"name": "Cheos Cafe API",
+		"description": "Colección de endpoints para la API Backend de Cheos Café",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Health Checks",
+			"item": [
+				{
+					"name": "Health Check General",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/health",
+							"host": ["{{base_url}}"],
+							"path": ["health"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Health Check Database",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/health/db",
+							"host": ["{{base_url}}"],
+							"path": ["health", "db"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Health Check Redis",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/health/redis",
+							"host": ["{{base_url}}"],
+							"path": ["health", "redis"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Ping",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/ping",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "ping"]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Authentication",
+			"item": [
+				{
+					"name": "Register User",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 201) {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.data && jsonData.data.access_token) {",
+									"        pm.environment.set(\"access_token\", jsonData.data.access_token);",
+									"        pm.environment.set(\"refresh_token\", jsonData.data.refresh_token);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"cliente@ejemplo.com\",\n  \"password\": \"Password123!\",\n  \"name\": \"Juan Pérez\",\n  \"phone\": \"3001234567\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/register",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "register"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Login",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.data && jsonData.data.access_token) {",
+									"        pm.environment.set(\"access_token\", jsonData.data.access_token);",
+									"        pm.environment.set(\"refresh_token\", jsonData.data.refresh_token);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"admin@cheoscafe.com\",\n  \"password\": \"Admin123!\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/login",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "login"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Refresh Token",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    var jsonData = pm.response.json();",
+									"    if (jsonData.data && jsonData.data.access_token) {",
+									"        pm.environment.set(\"access_token\", jsonData.data.access_token);",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"refresh_token\": \"{{refresh_token}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/refresh",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "refresh"]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "User Profile",
+			"item": [
+				{
+					"name": "Get My Profile",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/users/me",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users", "me"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update My Profile",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Juan Pérez Actualizado\",\n  \"phone\": \"3009876543\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/users/me",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users", "me"]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Products",
+			"item": [
+				{
+					"name": "Get All Products",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/products?page=1&page_size=10",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "products"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "page_size",
+									"value": "10"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Featured Products",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/products/featured",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "products", "featured"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Search Products",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/products/search?q=café&limit=10",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "products", "search"],
+							"query": [
+								{
+									"key": "q",
+									"value": "café"
+								},
+								{
+									"key": "limit",
+									"value": "10"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Product by ID",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/products/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "products", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "product-id-here"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create Product (Admin)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Café Especial Antioquia\",\n  \"description\": \"Café molido de origen 100% antioqueño con notas de chocolate y frutos secos\",\n  \"price\": 25000,\n  \"stock\": 100,\n  \"category\": \"Café Molido\",\n  \"weight\": 500,\n  \"images\": [\"https://example.com/cafe1.jpg\", \"https://example.com/cafe2.jpg\"],\n  \"is_featured\": true\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/products",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "products"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Product (Admin)",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Café Especial Antioquia Actualizado\",\n  \"price\": 27000,\n  \"stock\": 150\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/products/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "products", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "product-id-here"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Stock (Admin)",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"quantity\": -5\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/products/:id/stock",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "products", ":id", "stock"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "product-id-here"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Product (Admin)",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/products/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "products", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "product-id-here"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Discount Codes",
+			"item": [
+				{
+					"name": "Create Discount Code (Admin)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"code\": \"VERANO2025\",\n  \"description\": \"Descuento de verano 2025\",\n  \"type\": \"PERCENTAGE\",\n  \"value\": 15,\n  \"min_purchase\": 50000,\n  \"max_uses\": 100,\n  \"start_date\": \"2025-01-01T00:00:00Z\",\n  \"end_date\": \"2025-12-31T23:59:59Z\",\n  \"is_active\": true\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/discounts",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "discounts"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get All Discount Codes (Admin)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/discounts?page=1&page_size=10",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "discounts"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "page_size",
+									"value": "10"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Discount Code by ID (Admin)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/discounts/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "discounts", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "discount-id-here"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Discount Code (Admin)",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"value\": 20,\n  \"description\": \"Descuento de verano actualizado\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/discounts/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "discounts", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "discount-id-here"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Discount Code (Admin)",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/discounts/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "discounts", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "discount-id-here"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Validate Discount Code (Public)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"code\": \"VERANO2025\",\n  \"purchase_total\": 100000\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/discounts/validate",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "discounts", "validate"]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Reviews",
+			"item": [
+				{
+					"name": "Create Review (Public)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"product_id\": \"86f4183d-fc1d-4dc4-acec-4e6e68a16879\",\n  \"customer_name\": \"Juan Perez\",\n  \"customer_email\": \"juan@example.com\",\n  \"rating\": 5,\n  \"comment\": \"Excelente cafe, muy recomendado!\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/reviews",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "reviews"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get All Reviews (Admin)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/reviews?page=1&page_size=10",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "reviews"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "page_size",
+									"value": "10"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Review by ID (Admin)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/reviews/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "reviews", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "review-id-here"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update/Approve Review (Admin)",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"is_approved\": true\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/reviews/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "reviews", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "review-id-here"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Review (Admin)",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/reviews/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "reviews", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "review-id-here"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Product Reviews (Public)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/products/:id/reviews",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "products", ":id", "reviews"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "86f4183d-fc1d-4dc4-acec-4e6e68a16879"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Locations",
+			"item": [
+				{
+					"name": "Get Active Locations (Public)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/locations",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "locations"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Location by ID (Public)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/locations/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "locations", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "e76a97c8-e6dd-4c75-b7b1-837aa1ff398f"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create Location (Admin)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Cheos Cafe Centro\",\n  \"address\": \"Calle 50 # 45-20\",\n  \"city\": \"Medellin\",\n  \"department\": \"Antioquia\",\n  \"phone\": \"6044567890\",\n  \"latitude\": 6.2442,\n  \"longitude\": -75.5812,\n  \"schedule\": {\n    \"monday\": \"8:00 AM - 8:00 PM\",\n    \"tuesday\": \"8:00 AM - 8:00 PM\",\n    \"wednesday\": \"8:00 AM - 8:00 PM\",\n    \"thursday\": \"8:00 AM - 8:00 PM\",\n    \"friday\": \"8:00 AM - 9:00 PM\",\n    \"saturday\": \"9:00 AM - 9:00 PM\",\n    \"sunday\": \"10:00 AM - 6:00 PM\"\n  },\n  \"is_active\": true\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/locations",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "locations"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get All Locations with Pagination (Admin)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/locations/all?page=1&page_size=10",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "locations", "all"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "page_size",
+									"value": "10"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Location (Admin)",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"phone\": \"6044567891\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/locations/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "locations", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "e76a97c8-e6dd-4c75-b7b1-837aa1ff398f"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Location (Admin)",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/locations/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "locations", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "e76a97c8-e6dd-4c75-b7b1-837aa1ff398f"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:8080",
+			"type": "string"
+		}
+	]
+}
