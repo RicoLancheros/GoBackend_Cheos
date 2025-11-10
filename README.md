@@ -29,9 +29,9 @@ El sistema está diseñado con una arquitectura de tres capas (Repository, Servi
 ### Stack Principal
 
 <p align="center">
-  <img src="internal/decoration/golang.png" alt="Go" height="80" style="margin: 0 20px;"/>
-  <img src="internal/decoration/gogin.png" alt="Gin" height="80" style="margin: 0 20px;"/>
-  <img src="internal/decoration/firebase.png" alt="Firebase" height="80" style="margin: 0 20px;"/>
+  <img src="internal/decoration/goland.png" alt="Go" height="120" style="margin: 0 30px;"/>
+  <img src="internal/decoration/gogin.png" alt="Gin" height="120" style="margin: 0 30px;"/>
+  <img src="internal/decoration/firebase.png" alt="Firebase" height="120" style="margin: 0 30px;"/>
 </p>
 
 ### Dependencias Principales
