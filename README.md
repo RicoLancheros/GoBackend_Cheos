@@ -347,35 +347,4 @@ go fmt ./...                        # Formatear código
 go vet ./...                        # Analizar código
 ```
 
----
-
-## Notas de Seguridad
-
-**Variables sensibles que NUNCA deben subirse al repositorio:**
-- Archivo `.env`
-- Archivo `serviceAccountKey.json`
-- Cualquier credencial o secret
-
-**JWT Secrets:**
-- Usar secrets diferentes para desarrollo y producción
-- `JWT_SECRET` y `JWT_REFRESH_SECRET` deben ser diferentes entre sí
-- Mínimo 32 caracteres aleatorios
-
-**CORS en Producción:**
-```env
-ALLOWED_ORIGINS=https://tudominio.com,https://www.tudominio.com
-```
-
----
-
-## Licencia
-
-Este proyecto es propiedad de Cheos Café. Desarrollado con fines educativos - SENA.
-
----
-
-## Contacto
-
-**Proyecto:** Cheos Café E-commerce Backend
-**Tecnología:** Go + Firebase Firestore + Redis
-**Estado:** 93% completado
+- Fin... Gracias por leerlo todo <3
