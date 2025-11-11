@@ -65,6 +65,29 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		return
 	}
 
+	// Establecer cookies HttpOnly
+	// Access Token - expira en 15 minutos (900 segundos)
+	c.SetCookie(
+		"access_token",              // nombre
+		response.AccessToken,        // valor
+		900,                         // maxAge en segundos (15 minutos)
+		"/",                         // path
+		"",                          // domain (vacío = dominio actual)
+		false,                       // secure (false en desarrollo, true en producción)
+		true,                        // httpOnly (JavaScript no puede acceder)
+	)
+
+	// Refresh Token - expira en 7 días (604800 segundos)
+	c.SetCookie(
+		"refresh_token",             // nombre
+		response.RefreshToken,       // valor
+		604800,                      // maxAge en segundos (7 días)
+		"/",                         // path
+		"",                          // domain
+		false,                       // secure
+		true,                        // httpOnly
+	)
+
 	utils.SuccessResponse(c, http.StatusOK, "Login exitoso", response)
 }
 
@@ -85,6 +108,17 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 		utils.ErrorResponse(c, http.StatusUnauthorized, "Refresh token inválido", err.Error())
 		return
 	}
+
+	// Establecer nueva cookie con el access token renovado
+	c.SetCookie(
+		"access_token",              // nombre
+		accessToken,                 // valor
+		900,                         // maxAge en segundos (15 minutos)
+		"/",                         // path
+		"",                          // domain
+		false,                       // secure
+		true,                        // httpOnly
+	)
 
 	utils.SuccessResponse(c, http.StatusOK, "Token renovado exitosamente", gin.H{
 		"access_token": accessToken,

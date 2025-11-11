@@ -13,23 +13,31 @@ import (
 // AuthMiddleware verifica el token JWT
 func AuthMiddleware(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		// Obtener el header Authorization
-		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
-			utils.ErrorResponse(c, http.StatusUnauthorized, "Token de autenticación requerido", nil)
-			c.Abort()
-			return
-		}
+		var token string
 
-		// Verificar que tenga el formato "Bearer <token>"
-		parts := strings.Split(authHeader, " ")
-		if len(parts) != 2 || parts[0] != "Bearer" {
-			utils.ErrorResponse(c, http.StatusUnauthorized, "Formato de token inválido", nil)
-			c.Abort()
-			return
-		}
+		// Primero intentar obtener el token desde la cookie
+		tokenFromCookie, err := c.Cookie("access_token")
+		if err == nil && tokenFromCookie != "" {
+			token = tokenFromCookie
+		} else {
+			// Si no hay cookie, intentar obtener del header Authorization
+			authHeader := c.GetHeader("Authorization")
+			if authHeader == "" {
+				utils.ErrorResponse(c, http.StatusUnauthorized, "Token de autenticación requerido", nil)
+				c.Abort()
+				return
+			}
 
-		token := parts[1]
+			// Verificar que tenga el formato "Bearer <token>"
+			parts := strings.Split(authHeader, " ")
+			if len(parts) != 2 || parts[0] != "Bearer" {
+				utils.ErrorResponse(c, http.StatusUnauthorized, "Formato de token inválido", nil)
+				c.Abort()
+				return
+			}
+
+			token = parts[1]
+		}
 
 		// Validar el token
 		claims, err := utils.ValidateToken(token, cfg.JWTSecret)
@@ -71,17 +79,30 @@ func RequireAdmin() gin.HandlerFunc {
 // OptionalAuth permite acceso con o sin token
 func OptionalAuth(cfg *config.Config) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" {
-			// No hay token, continuar sin autenticación
-			c.Next()
-			return
+		var token string
+
+		// Primero intentar obtener el token desde la cookie
+		tokenFromCookie, err := c.Cookie("access_token")
+		if err == nil && tokenFromCookie != "" {
+			token = tokenFromCookie
+		} else {
+			// Si no hay cookie, intentar obtener del header Authorization
+			authHeader := c.GetHeader("Authorization")
+			if authHeader == "" {
+				// No hay token, continuar sin autenticación
+				c.Next()
+				return
+			}
+
+			// Si hay token, validarlo
+			parts := strings.Split(authHeader, " ")
+			if len(parts) == 2 && parts[0] == "Bearer" {
+				token = parts[1]
+			}
 		}
 
-		// Si hay token, validarlo
-		parts := strings.Split(authHeader, " ")
-		if len(parts) == 2 && parts[0] == "Bearer" {
-			token := parts[1]
+		// Si hay token (de cookie o header), validarlo
+		if token != "" {
 			claims, err := utils.ValidateToken(token, cfg.JWTSecret)
 			if err == nil {
 				// Token válido, guardar información

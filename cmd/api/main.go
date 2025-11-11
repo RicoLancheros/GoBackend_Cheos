@@ -303,6 +303,7 @@ func setupRoutes(
 		{
 			// Public routes
 			locations.GET("", locationHandler.GetActiveLocations)
+			locations.GET("/all", locationHandler.GetAllLocations)
 			locations.GET("/:id", locationHandler.GetLocation)
 
 			// Admin only routes
@@ -311,7 +312,6 @@ func setupRoutes(
 			adminLocations.Use(middleware.RequireAdmin())
 			{
 				adminLocations.POST("", locationHandler.CreateLocation)
-				adminLocations.GET("/all", locationHandler.GetAllLocations)
 				adminLocations.PUT("/:id", locationHandler.UpdateLocation)
 				adminLocations.DELETE("/:id", locationHandler.DeleteLocation)
 			}

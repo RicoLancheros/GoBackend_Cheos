@@ -66,7 +66,7 @@ func RateLimiter(maxRequests int, duration time.Duration) gin.HandlerFunc {
 
 // LoginRateLimiter límite específico para intentos de login
 func LoginRateLimiter() gin.HandlerFunc {
-	return RateLimiter(5, 15*time.Minute)
+	return RateLimiter(20, 15*time.Minute)
 }
 
 // cleanupVisitors limpia visitantes antiguos
