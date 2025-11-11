@@ -68,6 +68,7 @@ func main() {
 	discountRepo := repository.NewDiscountRepository(firebaseClient)
 	reviewRepo := repository.NewReviewRepository(firebaseClient)
 	locationRepo := repository.NewLocationRepository(firebaseClient)
+	galleryRepo := repository.NewGalleryRepository(firebaseClient)
 
 	// Initialize services
 	authService := services.NewAuthService(userRepo, cfg)
@@ -76,6 +77,14 @@ func main() {
 	discountService := services.NewDiscountService(discountRepo)
 	reviewService := services.NewReviewService(reviewRepo, productRepo)
 	locationService := services.NewLocationService(locationRepo)
+	galleryService := services.NewGalleryService(galleryRepo)
+
+	// Initialize upload service (Cloudinary)
+	uploadService, err := services.NewUploadService(cfg)
+	if err != nil {
+		logger.Warnf("Failed to initialize Cloudinary: %v (image upload will not be available)", err)
+		uploadService = nil
+	}
 
 	// Initialize handlers
 	authHandler := handlers.NewAuthHandler(authService)
@@ -84,6 +93,7 @@ func main() {
 	discountHandler := handlers.NewDiscountHandler(discountService)
 	reviewHandler := handlers.NewReviewHandler(reviewService)
 	locationHandler := handlers.NewLocationHandler(locationService)
+	galleryHandler := handlers.NewGalleryHandler(galleryService, uploadService)
 
 	// Initialize Gin router
 	router := gin.Default()
@@ -96,7 +106,7 @@ func main() {
 	router.Use(middleware.RateLimiter(cfg.RateLimitRequests, rateLimitDuration))
 
 	// Setup routes
-	setupRoutes(router, cfg, firebaseClient, redisClient, authHandler, productHandler, orderHandler, discountHandler, reviewHandler, locationHandler, logger)
+	setupRoutes(router, cfg, firebaseClient, redisClient, authHandler, productHandler, orderHandler, discountHandler, reviewHandler, locationHandler, galleryHandler, logger)
 
 	// Create HTTP server
 	srv := &http.Server{
@@ -146,6 +156,7 @@ func setupRoutes(
 	discountHandler *handlers.DiscountHandler,
 	reviewHandler *handlers.ReviewHandler,
 	locationHandler *handlers.LocationHandler,
+	galleryHandler *handlers.GalleryHandler,
 	logger *logrus.Logger,
 ) {
 	// Health check endpoints
@@ -201,6 +212,7 @@ func setupRoutes(
 			auth.POST("/register", authHandler.Register)
 			auth.POST("/login", middleware.LoginRateLimiter(), authHandler.Login)
 			auth.POST("/refresh", authHandler.RefreshToken)
+			auth.POST("/logout", authHandler.Logout)
 		}
 
 		// User profile routes (protected)
@@ -314,6 +326,27 @@ func setupRoutes(
 				adminLocations.POST("", locationHandler.CreateLocation)
 				adminLocations.PUT("/:id", locationHandler.UpdateLocation)
 				adminLocations.DELETE("/:id", locationHandler.DeleteLocation)
+			}
+		}
+
+		// Gallery routes
+		gallery := v1.Group("/gallery")
+		{
+			// Public routes
+			gallery.GET("/active", galleryHandler.GetActiveImages)
+			gallery.GET("/type/:type", galleryHandler.GetImagesByType)
+			gallery.GET("/:id", galleryHandler.GetImage)
+
+			// Admin only routes
+			adminGallery := gallery.Group("")
+			adminGallery.Use(middleware.AuthMiddleware(cfg))
+			adminGallery.Use(middleware.RequireAdmin())
+			{
+				adminGallery.GET("", galleryHandler.GetAllImages)
+				adminGallery.POST("", galleryHandler.CreateImage)
+				adminGallery.POST("/upload", galleryHandler.UploadImage)
+				adminGallery.PUT("/:id", galleryHandler.UpdateImage)
+				adminGallery.DELETE("/:id", galleryHandler.DeleteImage)
 			}
 		}
 

@@ -66,11 +66,11 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	}
 
 	// Establecer cookies HttpOnly
-	// Access Token - expira en 15 minutos (900 segundos)
+	// Access Token - expira en 24 horas (86400 segundos)
 	c.SetCookie(
 		"access_token",              // nombre
 		response.AccessToken,        // valor
-		900,                         // maxAge en segundos (15 minutos)
+		86400,                       // maxAge en segundos (24 horas)
 		"/",                         // path
 		"",                          // domain (vacío = dominio actual)
 		false,                       // secure (false en desarrollo, true en producción)
@@ -113,7 +113,7 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 	c.SetCookie(
 		"access_token",              // nombre
 		accessToken,                 // valor
-		900,                         // maxAge en segundos (15 minutos)
+		86400,                       // maxAge en segundos (24 horas)
 		"/",                         // path
 		"",                          // domain
 		false,                       // secure
@@ -169,4 +169,31 @@ func (h *AuthHandler) UpdateProfile(c *gin.Context) {
 	}
 
 	utils.SuccessResponse(c, http.StatusOK, "Perfil actualizado exitosamente", user)
+}
+
+// Logout cierra la sesión del usuario eliminando las cookies
+func (h *AuthHandler) Logout(c *gin.Context) {
+	// Eliminar cookie access_token (MaxAge=-1 elimina la cookie)
+	c.SetCookie(
+		"access_token",  // nombre
+		"",              // valor vacío
+		-1,              // maxAge=-1 elimina la cookie
+		"/",             // path
+		"",              // domain
+		false,           // secure
+		true,            // httpOnly
+	)
+
+	// Eliminar cookie refresh_token
+	c.SetCookie(
+		"refresh_token", // nombre
+		"",              // valor vacío
+		-1,              // maxAge=-1 elimina la cookie
+		"/",             // path
+		"",              // domain
+		false,           // secure
+		true,            // httpOnly
+	)
+
+	utils.SuccessResponse(c, http.StatusOK, "Logout exitoso", nil)
 }
