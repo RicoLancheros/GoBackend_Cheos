@@ -215,3 +215,95 @@ func (s *AuthService) UpdateProfile(ctx context.Context, userID string, req *mod
 
 	return user, nil
 }
+
+// GetAllUsers obtiene todos los usuarios (solo admin)
+func (s *AuthService) GetAllUsers(ctx context.Context) ([]*models.User, error) {
+	users, err := s.userRepo.GetAll(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Limpiar contraseñas
+	for _, user := range users {
+		user.Password = ""
+	}
+
+	return users, nil
+}
+
+// UpdateUserByID actualiza cualquier usuario por ID (solo admin)
+func (s *AuthService) UpdateUserByID(ctx context.Context, userID string, req *models.UpdateUserByIDRequest) (*models.User, error) {
+	id, err := uuid.Parse(userID)
+	if err != nil {
+		return nil, errors.New("ID de usuario inválido")
+	}
+
+	// Obtener usuario existente
+	user, err := s.userRepo.GetByID(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+
+	// Actualizar campos si se proporcionan
+	if req.Name != nil {
+		user.Name = *req.Name
+	}
+	if req.Phone != nil {
+		user.Phone = *req.Phone
+	}
+	if req.Email != nil {
+		// Verificar que el nuevo email no exista
+		if *req.Email != user.Email {
+			exists, err := s.userRepo.EmailExists(ctx, *req.Email)
+			if err != nil {
+				return nil, err
+			}
+			if exists {
+				return nil, errors.New("el email ya está registrado")
+			}
+			user.Email = *req.Email
+		}
+	}
+	if req.Role != nil {
+		user.Role = *req.Role
+	}
+	if req.IsActive != nil {
+		user.IsActive = *req.IsActive
+	}
+	if req.Password != nil && *req.Password != "" {
+		// Hashear nueva contraseña
+		hashedPassword, err := utils.HashPassword(*req.Password)
+		if err != nil {
+			return nil, err
+		}
+		user.Password = hashedPassword
+	}
+
+	// Actualizar usuario
+	err = s.userRepo.UpdateByID(ctx, id, user)
+	if err != nil {
+		return nil, err
+	}
+
+	// Limpiar contraseña antes de devolver
+	user.Password = ""
+
+	return user, nil
+}
+
+// DeleteUser elimina un usuario por ID (soft delete, solo admin)
+func (s *AuthService) DeleteUser(ctx context.Context, userID string) error {
+	id, err := uuid.Parse(userID)
+	if err != nil {
+		return errors.New("ID de usuario inválido")
+	}
+
+	// Verificar que el usuario existe
+	_, err = s.userRepo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+
+	// Eliminar usuario (soft delete)
+	return s.userRepo.Delete(ctx, id)
+}

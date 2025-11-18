@@ -221,6 +221,15 @@ func setupRoutes(
 		{
 			users.GET("/me", authHandler.GetProfile)
 			users.PUT("/me", authHandler.UpdateProfile)
+
+			// Admin only routes
+			adminUsers := users.Group("")
+			adminUsers.Use(middleware.RequireAdmin())
+			{
+				adminUsers.GET("", authHandler.GetAllUsers)
+				adminUsers.PUT("/:id", authHandler.UpdateUserByID)
+				adminUsers.DELETE("/:id", authHandler.DeleteUser)
+			}
 		}
 
 		// Product routes (public read, admin write)

@@ -197,3 +197,52 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 
 	utils.SuccessResponse(c, http.StatusOK, "Logout exitoso", nil)
 }
+
+// GetAllUsers obtiene todos los usuarios (solo admin)
+func (h *AuthHandler) GetAllUsers(c *gin.Context) {
+	users, err := h.authService.GetAllUsers(c.Request.Context())
+	if err != nil {
+		utils.ErrorResponse(c, http.StatusInternalServerError, "Error al obtener usuarios", err.Error())
+		return
+	}
+
+	utils.SuccessResponse(c, http.StatusOK, "Usuarios obtenidos exitosamente", users)
+}
+
+// UpdateUserByID actualiza cualquier usuario por ID (solo admin)
+func (h *AuthHandler) UpdateUserByID(c *gin.Context) {
+	userID := c.Param("id")
+
+	var req models.UpdateUserByIDRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, "Datos inválidos", err.Error())
+		return
+	}
+
+	// Validar
+	if err := utils.ValidateStruct(&req); err != nil {
+		utils.ValidationErrorResponse(c, utils.FormatValidationErrors(err))
+		return
+	}
+
+	user, err := h.authService.UpdateUserByID(c.Request.Context(), userID, &req)
+	if err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, "Error al actualizar usuario", err.Error())
+		return
+	}
+
+	utils.SuccessResponse(c, http.StatusOK, "Usuario actualizado exitosamente", user)
+}
+
+// DeleteUser elimina un usuario por ID (solo admin)
+func (h *AuthHandler) DeleteUser(c *gin.Context) {
+	userID := c.Param("id")
+
+	err := h.authService.DeleteUser(c.Request.Context(), userID)
+	if err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, "Error al eliminar usuario", err.Error())
+		return
+	}
+
+	utils.SuccessResponse(c, http.StatusOK, "Usuario eliminado exitosamente", nil)
+}

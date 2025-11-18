@@ -50,3 +50,12 @@ type UpdateProfileRequest struct {
 	Name  string `json:"name" validate:"omitempty,min=2"`
 	Phone string `json:"phone" validate:"omitempty"`
 }
+
+type UpdateUserByIDRequest struct {
+	Name     *string   `json:"name" validate:"omitempty,min=2"`
+	Phone    *string   `json:"phone" validate:"omitempty"`
+	Email    *string   `json:"email" validate:"omitempty,email"`
+	Password *string   `json:"password" validate:"omitempty,min=8"`
+	Role     *UserRole `json:"role" validate:"omitempty,oneof=CUSTOMER ADMIN"`
+	IsActive *bool     `json:"is_active" validate:"omitempty"`
+}

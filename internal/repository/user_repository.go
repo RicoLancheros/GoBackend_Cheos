@@ -127,3 +127,75 @@ func (r *UserRepository) EmailExists(ctx context.Context, email string) (bool, e
 
 	return true, nil
 }
+
+// GetAll obtiene todos los usuarios
+func (r *UserRepository) GetAll(ctx context.Context) ([]*models.User, error) {
+	query := r.firebase.Collection("users").OrderBy("created_at", firestore.Desc)
+
+	iter := query.Documents(ctx)
+	defer iter.Stop()
+
+	var users []*models.User
+	for {
+		doc, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		var user models.User
+		if err := doc.DataTo(&user); err != nil {
+			continue
+		}
+
+		userID, err := uuid.Parse(doc.Ref.ID)
+		if err != nil {
+			continue
+		}
+		user.ID = userID
+
+		users = append(users, &user)
+	}
+
+	return users, nil
+}
+
+// UpdateByID actualiza cualquier campo de un usuario por ID
+func (r *UserRepository) UpdateByID(ctx context.Context, id uuid.UUID, user *models.User) error {
+	// Actualizar timestamp
+	user.UpdatedAt = time.Now()
+	user.ID = id
+
+	// Actualizar documento completo
+	_, err := r.firebase.Collection("users").Doc(id.String()).Set(ctx, user)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// Delete elimina un usuario (soft delete)
+func (r *UserRepository) Delete(ctx context.Context, id uuid.UUID) error {
+	_, err := r.firebase.Collection("users").Doc(id.String()).Update(ctx, []firestore.Update{
+		{Path: "is_active", Value: false},
+		{Path: "updated_at", Value: time.Now()},
+	})
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// HardDelete elimina permanentemente un usuario
+func (r *UserRepository) HardDelete(ctx context.Context, id uuid.UUID) error {
+	_, err := r.firebase.Collection("users").Doc(id.String()).Delete(ctx)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}

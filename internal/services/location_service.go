@@ -30,6 +30,7 @@ func (s *LocationService) CreateLocation(ctx context.Context, req *models.Create
 		Phone:      req.Phone,
 		Latitude:   req.Latitude,
 		Longitude:  req.Longitude,
+		MapIframe:  req.MapIframe,
 		Schedule:   req.Schedule,
 		IsActive:   req.IsActive,
 	}
@@ -133,6 +134,9 @@ func (s *LocationService) UpdateLocation(ctx context.Context, id uuid.UUID, req 
 	}
 	if req.Longitude != 0 {
 		existing.Longitude = req.Longitude
+	}
+	if req.MapIframe != "" {
+		existing.MapIframe = req.MapIframe
 	}
 	if req.Schedule != nil {
 		existing.Schedule = req.Schedule

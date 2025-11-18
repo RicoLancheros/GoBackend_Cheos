@@ -25,6 +25,7 @@ type Location struct {
 	Phone      string    `json:"phone" firestore:"phone"`
 	Latitude   float64   `json:"latitude" firestore:"latitude"`
 	Longitude  float64   `json:"longitude" firestore:"longitude"`
+	MapIframe  string    `json:"map_iframe" firestore:"map_iframe"` // Iframe de Google Maps
 	Schedule   *Schedule `json:"schedule" firestore:"schedule"`
 	IsActive   bool      `json:"is_active" firestore:"is_active"`
 	CreatedAt  time.Time `json:"created_at" firestore:"created_at"`
@@ -41,6 +42,7 @@ type CreateLocationRequest struct {
 	Phone      string    `json:"phone" validate:"required"`
 	Latitude   float64   `json:"latitude" validate:"required"`
 	Longitude  float64   `json:"longitude" validate:"required"`
+	MapIframe  string    `json:"map_iframe" validate:"omitempty"` // Iframe de Google Maps (opcional)
 	Schedule   *Schedule `json:"schedule" validate:"required"`
 	IsActive   bool      `json:"is_active"`
 }
@@ -53,6 +55,7 @@ type UpdateLocationRequest struct {
 	Phone      string    `json:"phone" validate:"omitempty"`
 	Latitude   float64   `json:"latitude" validate:"omitempty"`
 	Longitude  float64   `json:"longitude" validate:"omitempty"`
+	MapIframe  string    `json:"map_iframe" validate:"omitempty"` // Iframe de Google Maps (opcional)
 	Schedule   *Schedule `json:"schedule" validate:"omitempty"`
 	IsActive   *bool     `json:"is_active" validate:"omitempty"`
 }

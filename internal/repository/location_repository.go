@@ -135,6 +135,9 @@ func (r *LocationRepository) Update(ctx context.Context, id uuid.UUID, location 
 	if location.Longitude != 0 {
 		updates = append(updates, firestore.Update{Path: "longitude", Value: location.Longitude})
 	}
+	if location.MapIframe != "" {
+		updates = append(updates, firestore.Update{Path: "map_iframe", Value: location.MapIframe})
+	}
 	if location.Schedule != nil {
 		updates = append(updates, firestore.Update{Path: "schedule", Value: location.Schedule})
 	}
