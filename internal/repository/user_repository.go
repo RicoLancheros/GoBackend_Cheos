@@ -177,12 +177,9 @@ func (r *UserRepository) UpdateByID(ctx context.Context, id uuid.UUID, user *mod
 	return nil
 }
 
-// Delete elimina un usuario (soft delete)
+// Delete elimina un usuario físicamente (hard delete)
 func (r *UserRepository) Delete(ctx context.Context, id uuid.UUID) error {
-	_, err := r.firebase.Collection("users").Doc(id.String()).Update(ctx, []firestore.Update{
-		{Path: "is_active", Value: false},
-		{Path: "updated_at", Value: time.Now()},
-	})
+	_, err := r.firebase.Collection("users").Doc(id.String()).Delete(ctx)
 	if err != nil {
 		return err
 	}

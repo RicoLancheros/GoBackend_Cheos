@@ -179,12 +179,9 @@ func (r *GalleryRepository) Update(ctx context.Context, image *models.GalleryIma
 	return nil
 }
 
-// Delete elimina una imagen (soft delete)
+// Delete elimina una imagen físicamente (hard delete)
 func (r *GalleryRepository) Delete(ctx context.Context, id uuid.UUID) error {
-	_, err := r.firebase.Collection("gallery").Doc(id.String()).Update(ctx, []firestore.Update{
-		{Path: "is_active", Value: false},
-		{Path: "updated_at", Value: time.Now()},
-	})
+	_, err := r.firebase.Collection("gallery").Doc(id.String()).Delete(ctx)
 	if err != nil {
 		return err
 	}

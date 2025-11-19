@@ -149,12 +149,9 @@ func (r *LocationRepository) Update(ctx context.Context, id uuid.UUID, location 
 	return err
 }
 
-// Delete soft deletes a location (sets is_active to false)
+// Delete elimina una ubicación físicamente (hard delete)
 func (r *LocationRepository) Delete(ctx context.Context, id uuid.UUID) error {
-	_, err := r.firebase.Collection("locations").Doc(id.String()).Update(ctx, []firestore.Update{
-		{Path: "is_active", Value: false},
-		{Path: "updated_at", Value: time.Now()},
-	})
+	_, err := r.firebase.Collection("locations").Doc(id.String()).Delete(ctx)
 	return err
 }
 

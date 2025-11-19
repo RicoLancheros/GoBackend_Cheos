@@ -187,14 +187,9 @@ func (r *DiscountRepository) Update(ctx context.Context, discount *models.Discou
 	return nil
 }
 
-// Delete soft deletes a discount code
+// Delete elimina un código de descuento físicamente (hard delete)
 func (r *DiscountRepository) Delete(ctx context.Context, id uuid.UUID) error {
-	updates := []firestore.Update{
-		{Path: "is_active", Value: false},
-		{Path: "updated_at", Value: time.Now()},
-	}
-
-	_, err := r.firebase.Collection("discount_codes").Doc(id.String()).Update(ctx, updates)
+	_, err := r.firebase.Collection("discount_codes").Doc(id.String()).Delete(ctx)
 	if err != nil {
 		return err
 	}

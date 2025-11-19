@@ -147,14 +147,9 @@ func (r *ProductRepository) Update(ctx context.Context, product *models.Product)
 	return nil
 }
 
-// Delete elimina un producto (soft delete)
+// Delete elimina un producto físicamente (hard delete)
 func (r *ProductRepository) Delete(ctx context.Context, id uuid.UUID) error {
-	updates := []firestore.Update{
-		{Path: "is_active", Value: false},
-		{Path: "updated_at", Value: time.Now()},
-	}
-
-	_, err := r.firebase.Collection("products").Doc(id.String()).Update(ctx, updates)
+	_, err := r.firebase.Collection("products").Doc(id.String()).Delete(ctx)
 	if err != nil {
 		return err
 	}
