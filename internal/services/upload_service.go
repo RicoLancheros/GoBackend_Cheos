@@ -27,7 +27,7 @@ func NewUploadService(cfg *config.Config) (*UploadService, error) {
 		cfg.CloudinaryAPISecret,
 	)
 	if err != nil {
-		return nil, fmt.Errorf("error al inicializar Cloudinary: %w", err)
+		return nil, fmt.Errorf("error inicializando cloudinary: %w", err)
 	}
 
 	return &UploadService{
@@ -36,11 +36,11 @@ func NewUploadService(cfg *config.Config) (*UploadService, error) {
 	}, nil
 }
 
-// UploadImage sube una imagen a Cloudinary y devuelve la URL
+// UploadImage sube una imagen a Cloudinary y devuelve la URL pública
 func (s *UploadService) UploadImage(ctx context.Context, file multipart.File, fileHeader *multipart.FileHeader) (string, error) {
 	// Validar tipo de archivo
 	if !s.isValidImageType(fileHeader.Filename) {
-		return "", errors.New("tipo de archivo inválido. Solo se permiten imágenes (jpg, jpeg, png, webp)")
+		return "", errors.New("tipo de archivo inválido. Solo se permiten imágenes (jpg, jpeg, png, webp, gif)")
 	}
 
 	// Validar tamaño (máximo 10MB)
@@ -48,23 +48,28 @@ func (s *UploadService) UploadImage(ctx context.Context, file multipart.File, fi
 		return "", errors.New("el archivo es demasiado grande. Tamaño máximo: 10MB")
 	}
 
-	// Generar nombre único para el archivo
+	// Generar public_id único para Cloudinary
 	timestamp := time.Now().Unix()
-	filename := fmt.Sprintf("gallery_%d_%s", timestamp, fileHeader.Filename)
+	baseFilename := strings.TrimSuffix(fileHeader.Filename, filepath.Ext(fileHeader.Filename))
+	publicID := fmt.Sprintf("cheos-cafe/gallery/%d_%s", timestamp, s.sanitizeFilename(baseFilename))
 
-	// Subir a Cloudinary
+	// Subir imagen a Cloudinary
 	uploadParams := uploader.UploadParams{
-		PublicID:     s.generatePublicID(filename),
-		Folder:       "cheos-gallery",
+		PublicID:     publicID,
+		Folder:       "cheos-cafe/gallery",
 		ResourceType: "image",
+		Context: map[string]string{
+			"uploaded_at":   time.Now().Format(time.RFC3339),
+			"original_name": fileHeader.Filename,
+		},
 	}
 
 	result, err := s.cloudinary.Upload.Upload(ctx, file, uploadParams)
 	if err != nil {
-		return "", fmt.Errorf("error al subir imagen a Cloudinary: %w", err)
+		return "", fmt.Errorf("error al subir imagen a cloudinary: %w", err)
 	}
 
-	// Devolver URL segura
+	// Retornar la URL segura de Cloudinary
 	return result.SecureURL, nil
 }
 
@@ -81,12 +86,13 @@ func (s *UploadService) isValidImageType(filename string) bool {
 	return validExtensions[ext]
 }
 
-// generatePublicID genera un ID público único para Cloudinary
-func (s *UploadService) generatePublicID(filename string) string {
-	// Eliminar extensión
-	name := strings.TrimSuffix(filename, filepath.Ext(filename))
+// sanitizeFilename limpia el nombre del archivo para uso en Firebase Storage
+func (s *UploadService) sanitizeFilename(filename string) string {
 	// Reemplazar espacios y caracteres especiales
-	name = strings.ReplaceAll(name, " ", "_")
+	name := strings.ReplaceAll(filename, " ", "_")
+	name = strings.ReplaceAll(name, "#", "")
+	name = strings.ReplaceAll(name, "?", "")
+	name = strings.ReplaceAll(name, "&", "")
 	name = strings.ToLower(name)
 	return name
 }

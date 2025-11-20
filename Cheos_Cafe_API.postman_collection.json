@@ -2,7 +2,7 @@
 	"info": {
 		"_postman_id": "cheos-cafe-backend-001",
 		"name": "Cheos Cafe API",
-		"description": "Colección de endpoints para la API Backend de Cheos Café",
+		"description": "Colección completa de endpoints para la API Backend de Cheos Café - Incluye Galería de Imágenes y Órdenes",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"item": [
@@ -23,14 +23,14 @@
 					"response": []
 				},
 				{
-					"name": "Health Check Database",
+					"name": "Health Check Firebase",
 					"request": {
 						"method": "GET",
 						"header": [],
 						"url": {
-							"raw": "{{base_url}}/health/db",
+							"raw": "{{base_url}}/health/firebase",
 							"host": ["{{base_url}}"],
-							"path": ["health", "db"]
+							"path": ["health", "firebase"]
 						}
 					},
 					"response": []
@@ -181,6 +181,19 @@
 						}
 					},
 					"response": []
+				},
+				{
+					"name": "Logout",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/logout",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "logout"]
+						}
+					},
+					"response": []
 				}
 			]
 		},
@@ -229,6 +242,83 @@
 							"raw": "{{base_url}}/api/v1/users/me",
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "users", "me"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get All Users (Admin)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/users",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update User by ID (Admin)",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Nombre Actualizado\",\n  \"role\": \"ADMIN\",\n  \"is_active\": true\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/users/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "user-id-here"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Delete User (Admin)",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/users/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "users", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "user-id-here"
+								}
+							]
 						}
 					},
 					"response": []
@@ -333,7 +423,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"name\": \"Café Especial Antioquia\",\n  \"description\": \"Café molido de origen 100% antioqueño con notas de chocolate y frutos secos\",\n  \"price\": 25000,\n  \"stock\": 100,\n  \"category\": \"Café Molido\",\n  \"weight\": 500,\n  \"images\": [\"https://example.com/cafe1.jpg\", \"https://example.com/cafe2.jpg\"],\n  \"is_featured\": true\n}"
+							"raw": "{\n  \"name\": \"Café Especial Antioquia\",\n  \"description\": \"Café molido de origen 100% antioqueño con notas de chocolate y frutos secos\",\n  \"price\": 25000,\n  \"stock\": 100,\n  \"category\": \"Café Molido\",\n  \"weight\": 500,\n  \"images\": [\"https://storage.googleapis.com/bucket/gallery/cafe1.jpg\"],\n  \"is_featured\": true\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/v1/products",
@@ -428,6 +518,413 @@
 								{
 									"key": "id",
 									"value": "product-id-here"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Orders",
+			"item": [
+				{
+					"name": "Create Order (Public - Guest Checkout)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"customer_name\": \"María González\",\n  \"customer_email\": \"maria@ejemplo.com\",\n  \"customer_phone\": \"3001234567\",\n  \"payment_method\": \"CONTRA_ENTREGA\",\n  \"shipping_address\": {\n    \"street\": \"Calle 50\",\n    \"number\": \"#25-30\",\n    \"city\": \"Medellín\",\n    \"department\": \"Antioquia\",\n    \"zip_code\": \"050001\",\n    \"details\": \"Apto 301, Torre B\"\n  },\n  \"items\": [\n    {\n      \"product_id\": \"86f4183d-fc1d-4dc4-acec-4e6e68a16879\",\n      \"quantity\": 2\n    },\n    {\n      \"product_id\": \"7c9e4a3b-2f1d-4e5c-9b8a-1d3f6e8c9a2b\",\n      \"quantity\": 1\n    }\n  ],\n  \"discount_code\": \"VERANO2025\",\n  \"utm_source\": \"facebook\",\n  \"utm_medium\": \"cpc\",\n  \"utm_campaign\": \"verano2025\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/orders",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "orders"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Order by Number (Public)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/orders/number/:number",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "orders", "number", ":number"],
+							"variable": [
+								{
+									"key": "number",
+									"value": "ORD-20250119-ABC123"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get My Orders (Authenticated)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/orders/me?page=1&page_size=10",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "orders", "me"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "page_size",
+									"value": "10"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Order by ID (Authenticated)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/orders/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "orders", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "order-id-here"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get All Orders (Admin)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/orders?page=1&page_size=10",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "orders"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "page_size",
+									"value": "10"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Order Status (Admin)",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"status\": \"CONFIRMED\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/orders/:id/status",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "orders", ":id", "status"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "order-id-here"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Payment Status (Admin)",
+					"request": {
+						"method": "PATCH",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"payment_status\": \"APPROVED\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/orders/:id/payment",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "orders", ":id", "payment"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "order-id-here"
+								}
+							]
+						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Gallery - Image Management",
+			"item": [
+				{
+					"name": "Upload Image (Admin - Firebase Storage)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "image",
+									"type": "file",
+									"src": []
+								},
+								{
+									"key": "title",
+									"value": "Logo Cheos Café",
+									"type": "text"
+								},
+								{
+									"key": "description",
+									"value": "Logo principal de la cafetería",
+									"type": "text"
+								},
+								{
+									"key": "image_type",
+									"value": "GENERAL",
+									"description": "CAROUSEL | PRODUCT | BACKGROUND | GENERAL",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/gallery/upload",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "gallery", "upload"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Create Image (Admin - Only URL)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"url\": \"https://storage.googleapis.com/bucket/gallery/imagen.jpg\",\n  \"title\": \"Café Premium\",\n  \"description\": \"Imagen de café premium para producto\",\n  \"image_type\": \"PRODUCT\",\n  \"tags\": [\"cafe\", \"premium\", \"producto\"]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/gallery",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "gallery"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get All Images (Admin)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/gallery",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "gallery"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Active Images (Public)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/gallery/active",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "gallery", "active"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Images by Type - CAROUSEL (Public)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/gallery/type/CAROUSEL",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "gallery", "type", "CAROUSEL"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Images by Type - PRODUCT (Public)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/gallery/type/PRODUCT",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "gallery", "type", "PRODUCT"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Image by ID (Public)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/gallery/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "gallery", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "image-id-here"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Update Image (Admin)",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"Nuevo título de imagen\",\n  \"description\": \"Nueva descripción actualizada\",\n  \"image_type\": \"CAROUSEL\",\n  \"tags\": [\"actualizado\", \"carousel\"],\n  \"is_active\": true\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/gallery/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "gallery", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "image-id-here"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Image (Admin - Hard Delete)",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/gallery/:id",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "gallery", ":id"],
+							"variable": [
+								{
+									"key": "id",
+									"value": "image-id-here"
 								}
 							]
 						}
@@ -796,6 +1293,29 @@
 					"response": []
 				},
 				{
+					"name": "Get All Locations (Public)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/locations/all?page=1&page_size=10",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "locations", "all"],
+							"query": [
+								{
+									"key": "page",
+									"value": "1"
+								},
+								{
+									"key": "page_size",
+									"value": "10"
+								}
+							]
+						}
+					},
+					"response": []
+				},
+				{
 					"name": "Create Location (Admin)",
 					"request": {
 						"method": "POST",
@@ -812,41 +1332,12 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"name\": \"Cheos Cafe Centro\",\n  \"address\": \"Calle 50 # 45-20\",\n  \"city\": \"Medellin\",\n  \"department\": \"Antioquia\",\n  \"phone\": \"6044567890\",\n  \"latitude\": 6.2442,\n  \"longitude\": -75.5812,\n  \"schedule\": {\n    \"monday\": \"8:00 AM - 8:00 PM\",\n    \"tuesday\": \"8:00 AM - 8:00 PM\",\n    \"wednesday\": \"8:00 AM - 8:00 PM\",\n    \"thursday\": \"8:00 AM - 8:00 PM\",\n    \"friday\": \"8:00 AM - 9:00 PM\",\n    \"saturday\": \"9:00 AM - 9:00 PM\",\n    \"sunday\": \"10:00 AM - 6:00 PM\"\n  },\n  \"is_active\": true\n}"
+							"raw": "{\n  \"name\": \"Cheos Cafe Centro\",\n  \"address\": \"Calle 50 # 45-20\",\n  \"city\": \"Medellin\",\n  \"department\": \"Antioquia\",\n  \"phone\": \"6044567890\",\n  \"latitude\": 6.2442,\n  \"longitude\": -75.5812,\n  \"map_iframe\": \"<iframe src='https://www.google.com/maps/embed?pb=...' width='600' height='450'></iframe>\",\n  \"schedule\": {\n    \"monday\": \"8:00 AM - 8:00 PM\",\n    \"tuesday\": \"8:00 AM - 8:00 PM\",\n    \"wednesday\": \"8:00 AM - 8:00 PM\",\n    \"thursday\": \"8:00 AM - 8:00 PM\",\n    \"friday\": \"8:00 AM - 9:00 PM\",\n    \"saturday\": \"9:00 AM - 9:00 PM\",\n    \"sunday\": \"10:00 AM - 6:00 PM\"\n  },\n  \"is_active\": true\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/v1/locations",
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "locations"]
-						}
-					},
-					"response": []
-				},
-				{
-					"name": "Get All Locations with Pagination (Admin)",
-					"request": {
-						"method": "GET",
-						"header": [
-							{
-								"key": "Authorization",
-								"value": "Bearer {{access_token}}",
-								"type": "text"
-							}
-						],
-						"url": {
-							"raw": "{{base_url}}/api/v1/locations/all?page=1&page_size=10",
-							"host": ["{{base_url}}"],
-							"path": ["api", "v1", "locations", "all"],
-							"query": [
-								{
-									"key": "page",
-									"value": "1"
-								},
-								{
-									"key": "page_size",
-									"value": "10"
-								}
-							]
 						}
 					},
 					"response": []
@@ -868,7 +1359,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"phone\": \"6044567891\"\n}"
+							"raw": "{\n  \"phone\": \"6044567891\",\n  \"map_iframe\": \"<iframe src='https://www.google.com/maps/embed?pb=...' width='600' height='450'></iframe>\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/v1/locations/:id",
