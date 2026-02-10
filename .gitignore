@@ -79,3 +79,8 @@ Endpoints_Test.md
 .claude
 CambiosAHacer.md
 ConexionCloudinary.md
+MigracionClaude.md
+ContextoSesion.md
+
+# Local dev scripts
+run.ps1
