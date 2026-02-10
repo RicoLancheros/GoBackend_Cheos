@@ -24,7 +24,15 @@ func NewFirebaseConnection(cfg *config.Config) (*FirebaseClient, error) {
 	ctx := context.Background()
 
 	// Configurar opciones de Firebase
-	opt := option.WithCredentialsFile(cfg.FirebaseCredentialsPath)
+	// Prioridad: 1) JSON en variable de entorno (Render/producción), 2) Archivo local (desarrollo)
+	var opt option.ClientOption
+	if cfg.FirebaseCredentialsJSON != "" {
+		// Usar credenciales desde variable de entorno (para Render/producción)
+		opt = option.WithCredentialsJSON([]byte(cfg.FirebaseCredentialsJSON))
+	} else {
+		// Usar archivo de credenciales (para desarrollo local)
+		opt = option.WithCredentialsFile(cfg.FirebaseCredentialsPath)
+	}
 
 	// Configuración de la app de Firebase
 	firebaseConfig := &firebase.Config{

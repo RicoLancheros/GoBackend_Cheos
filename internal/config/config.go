@@ -17,6 +17,7 @@ type Config struct {
 	// Firebase
 	FirebaseProjectID       string
 	FirebaseCredentialsPath string
+	FirebaseCredentialsJSON string // Para Render/producción (JSON completo como string)
 	FirebaseStorageBucket   string
 
 	// Redis (Upstash)
@@ -79,6 +80,7 @@ func LoadConfig() (*Config, error) {
 		// Firebase
 		FirebaseProjectID:       getEnv("FIREBASE_PROJECT_ID", ""),
 		FirebaseCredentialsPath: getEnv("FIREBASE_CREDENTIALS_PATH", "./firebase-credentials.json"),
+		FirebaseCredentialsJSON: getEnv("FIREBASE_CREDENTIALS_JSON", ""), // JSON completo para Render
 		FirebaseStorageBucket:   getEnv("FIREBASE_STORAGE_BUCKET", ""),
 
 		// Redis

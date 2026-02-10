@@ -1,0 +1,53 @@
+# Git
+.git
+.gitignore
+
+# Environment files (secrets)
+.env
+.env.*
+firebase-credentials.json
+*-firebase-adminsdk-*.json
+serviceAccountKey.json
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Documentation
+*.md
+!README.md
+
+# Postman
+*.postman_collection.json
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+bin/
+build/
+dist/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test files
+*_test.go
+*.test
+
+# Local scripts
+*.ps1
+*.sh
+
+# Logs
+*.log
+logs/
+
+# Temporary
+tmp/
+temp/
