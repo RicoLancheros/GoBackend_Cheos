@@ -69,6 +69,7 @@ func main() {
 	reviewRepo := repository.NewReviewRepository(firebaseClient)
 	locationRepo := repository.NewLocationRepository(firebaseClient)
 	galleryRepo := repository.NewGalleryRepository(firebaseClient)
+	siteConfigRepo := repository.NewSiteConfigRepository(firebaseClient)
 
 	// Initialize services
 	authService := services.NewAuthService(userRepo, cfg)
@@ -78,6 +79,7 @@ func main() {
 	reviewService := services.NewReviewService(reviewRepo, productRepo)
 	locationService := services.NewLocationService(locationRepo)
 	galleryService := services.NewGalleryService(galleryRepo)
+	siteConfigService := services.NewSiteConfigService(siteConfigRepo)
 
 	// Initialize upload service (Cloudinary)
 	uploadService, err := services.NewUploadService(cfg)
@@ -94,6 +96,7 @@ func main() {
 	reviewHandler := handlers.NewReviewHandler(reviewService)
 	locationHandler := handlers.NewLocationHandler(locationService)
 	galleryHandler := handlers.NewGalleryHandler(galleryService, uploadService)
+	siteConfigHandler := handlers.NewSiteConfigHandler(siteConfigService)
 
 	// Initialize Gin router
 	router := gin.Default()
@@ -106,7 +109,7 @@ func main() {
 	router.Use(middleware.RateLimiter(cfg.RateLimitRequests, rateLimitDuration))
 
 	// Setup routes
-	setupRoutes(router, cfg, firebaseClient, redisClient, authHandler, productHandler, orderHandler, discountHandler, reviewHandler, locationHandler, galleryHandler, logger)
+	setupRoutes(router, cfg, firebaseClient, redisClient, authHandler, productHandler, orderHandler, discountHandler, reviewHandler, locationHandler, galleryHandler, siteConfigHandler, logger)
 
 	// Create HTTP server
 	srv := &http.Server{
@@ -157,6 +160,7 @@ func setupRoutes(
 	reviewHandler *handlers.ReviewHandler,
 	locationHandler *handlers.LocationHandler,
 	galleryHandler *handlers.GalleryHandler,
+	siteConfigHandler *handlers.SiteConfigHandler,
 	logger *logrus.Logger,
 ) {
 	// Health check endpoints
@@ -356,6 +360,21 @@ func setupRoutes(
 				adminGallery.POST("/upload", galleryHandler.UploadImage)
 				adminGallery.PUT("/:id", galleryHandler.UpdateImage)
 				adminGallery.DELETE("/:id", galleryHandler.DeleteImage)
+			}
+		}
+
+		// Site Config routes (carousel, etc.)
+		siteConfig := v1.Group("/config")
+		{
+			// Public: obtener carrusel
+			siteConfig.GET("/carousel", siteConfigHandler.GetCarousel)
+
+			// Admin: actualizar carrusel
+			adminConfig := siteConfig.Group("")
+			adminConfig.Use(middleware.AuthMiddleware(cfg))
+			adminConfig.Use(middleware.RequireAdmin())
+			{
+				adminConfig.PUT("/carousel", siteConfigHandler.UpdateCarousel)
 			}
 		}
 
