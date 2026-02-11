@@ -1,6 +1,7 @@
 package middleware
 
 import (
+	"fmt"
 	"net/http"
 	"sync"
 	"time"
@@ -14,27 +15,40 @@ type visitor struct {
 	count    int
 }
 
+// Rate limiters separados para evitar interferencias
 var (
-	visitors = make(map[string]*visitor)
-	mu       sync.Mutex
+	// Rate limiter global
+	globalVisitors   = make(map[string]*visitor)
+	globalMu         sync.Mutex
+	globalCleanupRun bool
+
+	// Rate limiter específico para login
+	loginVisitors   = make(map[string]*visitor)
+	loginMu         sync.Mutex
+	loginCleanupRun bool
 )
 
-// RateLimiter limita el número de requests por IP
+// RateLimiter limita el número de requests por IP (uso global)
 func RateLimiter(maxRequests int, duration time.Duration) gin.HandlerFunc {
-	// Limpiar visitantes viejos cada hora
-	go cleanupVisitors(duration)
+	// Iniciar cleanup solo una vez
+	globalMu.Lock()
+	if !globalCleanupRun {
+		globalCleanupRun = true
+		go cleanupMap(&globalMu, globalVisitors, duration)
+	}
+	globalMu.Unlock()
 
 	return func(c *gin.Context) {
 		ip := c.ClientIP()
 
-		mu.Lock()
-		v, exists := visitors[ip]
+		globalMu.Lock()
+		v, exists := globalVisitors[ip]
 		if !exists {
-			visitors[ip] = &visitor{
+			globalVisitors[ip] = &visitor{
 				lastSeen: time.Now(),
 				count:    1,
 			}
-			mu.Unlock()
+			globalMu.Unlock()
 			c.Next()
 			return
 		}
@@ -43,7 +57,7 @@ func RateLimiter(maxRequests int, duration time.Duration) gin.HandlerFunc {
 		if time.Since(v.lastSeen) > duration {
 			v.lastSeen = time.Now()
 			v.count = 1
-			mu.Unlock()
+			globalMu.Unlock()
 			c.Next()
 			return
 		}
@@ -51,7 +65,7 @@ func RateLimiter(maxRequests int, duration time.Duration) gin.HandlerFunc {
 		// Incrementar contador
 		v.count++
 		count := v.count
-		mu.Unlock()
+		globalMu.Unlock()
 
 		// Verificar límite
 		if count > maxRequests {
@@ -64,13 +78,69 @@ func RateLimiter(maxRequests int, duration time.Duration) gin.HandlerFunc {
 	}
 }
 
-// LoginRateLimiter límite específico para intentos de login
+// LoginRateLimiter límite específico para intentos de login (mapa separado)
+// Permite 5 intentos fallidos cada 15 minutos por IP
 func LoginRateLimiter() gin.HandlerFunc {
-	return RateLimiter(20, 15*time.Minute)
+	maxAttempts := 5
+	duration := 15 * time.Minute
+
+	// Iniciar cleanup solo una vez
+	loginMu.Lock()
+	if !loginCleanupRun {
+		loginCleanupRun = true
+		go cleanupMap(&loginMu, loginVisitors, duration)
+	}
+	loginMu.Unlock()
+
+	return func(c *gin.Context) {
+		ip := c.ClientIP()
+
+		loginMu.Lock()
+		v, exists := loginVisitors[ip]
+		if !exists {
+			loginVisitors[ip] = &visitor{
+				lastSeen: time.Now(),
+				count:    1,
+			}
+			loginMu.Unlock()
+			c.Next()
+			return
+		}
+
+		// Verificar si ha pasado el tiempo de la ventana
+		if time.Since(v.lastSeen) > duration {
+			v.lastSeen = time.Now()
+			v.count = 1
+			loginMu.Unlock()
+			c.Next()
+			return
+		}
+
+		// Incrementar contador
+		v.count++
+		count := v.count
+		loginMu.Unlock()
+
+		// Verificar límite
+		if count > maxAttempts {
+			remaining := duration - time.Since(v.lastSeen)
+			minutes := int(remaining.Minutes()) + 1
+			utils.ErrorResponse(c, http.StatusTooManyRequests,
+				fmt.Sprintf("Demasiados intentos de inicio de sesión. Intenta de nuevo en %d minutos.", minutes),
+				map[string]interface{}{
+					"retry_after_seconds": int(remaining.Seconds()),
+					"retry_after_minutes": minutes,
+				})
+			c.Abort()
+			return
+		}
+
+		c.Next()
+	}
 }
 
-// cleanupVisitors limpia visitantes antiguos
-func cleanupVisitors(duration time.Duration) {
+// cleanupMap limpia visitantes antiguos de un mapa específico
+func cleanupMap(mu *sync.Mutex, visitors map[string]*visitor, duration time.Duration) {
 	for {
 		time.Sleep(duration)
 		mu.Lock()
