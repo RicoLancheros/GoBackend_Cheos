@@ -1,526 +1,371 @@
-# 🔄 Migración de Proyecto - Cheos Café Backend
+# Migración de Proyecto - Cheos Café Backend + Frontend
 
-## 📋 Contexto General del Proyecto
+## Contexto General del Proyecto
 
-Este es un **backend completo para e-commerce de Cheos Café**, desarrollado en **Go 1.21+** usando **Gin Framework** y **Firebase Firestore** como base de datos NoSQL. El proyecto está en fase de desarrollo activo y ya cuenta con funcionalidad completa de autenticación, productos, órdenes, ubicaciones, galería, reseñas y códigos de descuento.
+E-commerce SPA completo de venta de café molido de especialidad para **Cheos Café**, empresa colombiana con 8 tiendas físicas en Antioquia.
 
-### Información Importante del Proyecto:
-- **Nombre:** Cheos Café Backend
-- **Lenguaje:** Go (Golang)
-- **Framework Web:** Gin
-- **Base de Datos:** Firebase Firestore (NoSQL)
-- **Autenticación:** JWT con cookies (24 horas de expiración)
+### Información del Proyecto:
+- **Nombre:** Cheos Café E-commerce
+- **Backend:** Go 1.21+ con Gin Framework (`GoBackend_Cheos/`)
+- **Frontend:** React + Vite + Tailwind CSS (`ReactFront_Cheos/`)
+- **Base de Datos:** Firebase Firestore (NoSQL) - única fuente de verdad
+- **Autenticación:** JWT con cookies + headers (access: 15min, refresh: 7 días)
 - **Patrón de Arquitectura:** Repository-Service-Handler (3 capas)
+- **Imágenes:** Cloudinary para upload y hosting (cloud name: detib7vvw)
 - **Puerto:** 8080
 - **Versión API:** v1
-- **Rama Git:** main
+- **Roles:** ADMIN y CUSTOMER
+- **Redis:** Opcional, no configurado actualmente
 
 ---
 
-## 🎯 Estado Actual del Desarrollo
+## Deployment Actual
 
-### ✅ Completado Recientemente:
+- **Backend:** Render (Docker) - `https://gobackend-cheos.onrender.com`
+- **Frontend:** Netlify - `https://cheoscafesena.netlify.app`
+- **Firebase:** Proyecto `golandbackend-cheos` (activo y conectado)
+- Las credenciales de Firebase se pasan como variable de entorno `FIREBASE_CREDENTIALS_JSON` en Render (JSON completo como string)
 
-#### 1. **Endpoints de Gestión de Usuarios (Administrador)**
-Se implementaron 3 nuevos endpoints para administradores:
-- `GET /api/v1/users` - Obtener todos los usuarios
-- `PUT /api/v1/users/:id` - Actualizar cualquier usuario por ID
-- `DELETE /api/v1/users/:id` - Eliminar usuario por ID
+### Variables de entorno en Render (backend)
+```
+GO_ENV=production
+PORT=8080
+FIREBASE_PROJECT_ID=golandbackend-cheos
+FIREBASE_CREDENTIALS_JSON=<JSON completo del archivo de credenciales>
+JWT_SECRET=<secret seguro>
+JWT_REFRESH_SECRET=<secret seguro>
+JWT_EXPIRES_IN=15m
+JWT_REFRESH_EXPIRES_IN=168h
+CORS_ALLOWED_ORIGINS=https://cheoscafesena.netlify.app
+CLOUDINARY_CLOUD_NAME=detib7vvw
+CLOUDINARY_API_KEY=549224315686314
+CLOUDINARY_API_SECRET=<secret>
+RATE_LIMIT_REQUESTS=100
+RATE_LIMIT_DURATION=15m
+```
 
-**Archivos modificados:**
-- `internal/repository/user_repository.go` - Métodos: `GetAll()`, `UpdateByID()`, `Delete()`
-- `internal/services/auth_service.go` - Métodos: `GetAllUsers()`, `UpdateUserByID()`, `DeleteUser()`
-- `internal/models/user.go` - Nuevo DTO: `UpdateUserByIDRequest`
-- `internal/handlers/auth_handler.go` - Handlers: `GetAllUsers()`, `UpdateUserByID()`, `DeleteUser()`
-- `cmd/api/main.go` - 3 nuevas rutas admin-only
+### Variable de entorno en Netlify (frontend)
+```
+VITE_API_URL=https://gobackend-cheos.onrender.com/api/v1
+```
 
-**Características:**
+---
+
+## Estado Actual del Desarrollo
+
+### Completado
+
+#### 1. Gestión de Usuarios (Admin)
+- `GET /api/v1/users` - Listar todos los usuarios
+- `PUT /api/v1/users/:id` - Actualizar usuario por ID (nombre, email, password, rol, is_active)
+- `DELETE /api/v1/users/:id` - Eliminar usuario (hard delete)
 - Validación de email único al actualizar
 - Hashing de contraseña con bcrypt
-- Actualización parcial usando punteros
-- Solo accesible para usuarios con rol ADMIN
 
-#### 2. **Campo map_iframe para Google Maps en Ubicaciones**
-Se agregó la capacidad de almacenar iframes de Google Maps en las ubicaciones:
+#### 2. Campo map_iframe para Google Maps en Ubicaciones
+- Campo `MapIframe string` en el modelo Location
+- Permite almacenar iframes de Google Maps
 
-**Archivos modificados:**
-- `internal/models/location.go` - Campo `MapIframe string`
-- `internal/services/location_service.go` - Soporte en Create y Update
-- `internal/repository/location_repository.go` - Agregado al método `Update()`
+#### 3. Hard Delete en TODOS los endpoints DELETE
+- Todos los DELETE eliminan físicamente de Firebase
+- Aplica a: productos, usuarios, ubicaciones, galería, descuentos, reseñas
 
-**Uso:**
-Los administradores pueden pegar el código iframe de Google Maps para mostrar la ubicación exacta.
+#### 4. Deploy del Backend en Render
+- `firebase.go` soporta credenciales desde variable de entorno (`FIREBASE_CREDENTIALS_JSON`) además del archivo local
+- Se agregó `FirebaseCredentialsJSON` al config.go
+- Se creó `.dockerignore` para optimizar el build
+- Dockerfile multi-stage ya existía
 
-#### 3. **Cambio CRÍTICO: TODOS los DELETE son ahora Hard Delete**
-Se cambió **TODOS** los endpoints DELETE de Soft Delete a Hard Delete (eliminación física):
+#### 5. Fix: URLs hardcodeadas en el frontend
+- 4 componentes tenían `http://localhost:8080/api/v1` hardcodeado en vez de usar `import.meta.env.VITE_API_URL`
+- Archivos corregidos: `EditProductModal.jsx`, `AddProductModal.jsx`, `GalleryManagementModal.jsx`, `GalleryImageSelector.jsx`
 
-**Repositorios modificados:**
-- ✅ `product_repository.go` - DELETE elimina físicamente
-- ✅ `user_repository.go` - DELETE elimina físicamente
-- ✅ `location_repository.go` - DELETE elimina físicamente
-- ✅ `gallery_repository.go` - DELETE elimina físicamente
-- ✅ `discount_repository.go` - DELETE elimina físicamente
-- ✅ `review_repository.go` - Ya tenía Hard Delete
+#### 6. Fix: Gestión de usuarios no funcionaba
+- El frontend usaba método `PATCH` pero el backend espera `PUT` para actualizar usuarios
+- Se corrigió el método HTTP en `UserManagementModal.jsx`
+- Se agregó funcionalidad de eliminar usuarios (con confirmación)
+- Se agregó feedback visual (colores para estados, alertas de éxito/error)
 
-**IMPORTANTE:** Ahora cuando eliminas cualquier registro, se **borra completamente de Firebase** y no se puede recuperar.
+#### 7. Fix: Galería no cargaba imágenes
+- El `useEffect` no tenía `token` como dependencia
+- Se agregó el token como dependencia y guard clause
+- Se eliminaron campos inútiles del formulario de subida (etiquetas, imagen activa)
+- Se agregó funcionalidad de editar imágenes existentes (título, descripción, tipo)
+
+#### 8. Feature: Carrusel editable por admin
+- Se creó `CarouselEditorModal.jsx` para que el admin seleccione hasta 6 imágenes
+- Se filtran solo imágenes de tipo GENERAL y CAROUSEL para el carrusel
+- Se creó endpoint `GET/PUT /api/v1/config/carousel` en el backend (colección `site_config` en Firebase)
+- El `HeroCarousel.jsx` carga imágenes desde la API, no desde localStorage
+- Se agregó botón "Editar carrusel" en el menú de admin del Navbar
+- Archivos backend nuevos: `site_config.go` (modelo), `site_config_repository.go`, `site_config_service.go`, `site_config_handler.go`
+
+#### 9. Feature: GalleryImageSelector filtra por tipo
+- Nuevo prop `allowedTypes` (default: `['GENERAL', 'PRODUCT']`)
+- Para productos solo muestra imágenes de tipo GENERAL y PRODUCT
+- Para carrusel solo muestra imágenes de tipo GENERAL y CAROUSEL
+
+#### 10. Fix: Rate limiter compartido (bug crítico)
+- El rate limiter global y el de login compartían el mismo mapa `visitors`
+- Se separaron en mapas independientes: `globalVisitors` y `loginVisitors`
+- Login ahora tiene su propio límite: 5 intentos / 15 minutos
+- Se evitó la creación de múltiples goroutines de cleanup
 
 ---
 
-## 📂 Estructura del Proyecto
+## Estructura del Proyecto (Backend)
 
 ```
 GoBackend_Cheos/
-├── cmd/
-│   └── api/
-│       └── main.go                 # Punto de entrada, configuración de rutas
+├── cmd/api/main.go                        # Punto de entrada + rutas
 ├── internal/
-│   ├── config/
-│   │   └── config.go               # Configuración (JWT, Firebase, etc.)
+│   ├── config/config.go                   # Configuración desde .env
 │   ├── database/
-│   │   ├── firebase.go             # Conexión a Firestore
-│   │   └── redis.go                # Conexión a Redis (cache)
-│   ├── handlers/                   # HTTP handlers (controladores)
-│   │   ├── auth_handler.go         # Login, registro, gestión usuarios
-│   │   ├── product_handler.go      # CRUD productos
-│   │   ├── order_handler.go        # Gestión de órdenes
-│   │   ├── location_handler.go     # CRUD ubicaciones
-│   │   ├── gallery_handler.go      # Galería de imágenes
-│   │   ├── review_handler.go       # Reseñas de productos
-│   │   └── discount_handler.go     # Códigos de descuento
+│   │   ├── firebase.go                    # Conexión Firebase (archivo o env var)
+│   │   └── redis.go                       # Conexión Redis (opcional)
+│   ├── handlers/                          # 8 handlers
+│   │   ├── auth_handler.go                # Login, registro, gestión usuarios
+│   │   ├── product_handler.go             # CRUD productos
+│   │   ├── order_handler.go               # Gestión de órdenes
+│   │   ├── discount_handler.go            # Códigos de descuento
+│   │   ├── review_handler.go              # Reseñas de productos
+│   │   ├── location_handler.go            # CRUD ubicaciones
+│   │   ├── gallery_handler.go             # Galería de imágenes
+│   │   └── site_config_handler.go         # Configuración del sitio (carrusel)
 │   ├── middleware/
-│   │   ├── auth.go                 # AuthMiddleware (JWT)
-│   │   ├── cors.go                 # CORS
-│   │   └── admin.go                # RequireAdmin
-│   ├── models/                     # Modelos de datos y DTOs
+│   │   ├── auth.go                        # AuthMiddleware (JWT)
+│   │   ├── cors.go                        # CORS
+│   │   ├── rate_limit.go                  # Rate limiting (global + login separados)
+│   │   └── admin.go                       # RequireAdmin
+│   ├── models/                            # 8 modelos + DTOs
 │   │   ├── user.go
 │   │   ├── product.go
 │   │   ├── order.go
 │   │   ├── location.go
 │   │   ├── gallery.go
 │   │   ├── review.go
-│   │   └── discount.go
-│   ├── repository/                 # Capa de acceso a datos
+│   │   ├── discount.go
+│   │   └── site_config.go                 # Modelo de configuración del sitio
+│   ├── repository/                        # 8 repositorios
 │   │   ├── user_repository.go
 │   │   ├── product_repository.go
 │   │   ├── order_repository.go
 │   │   ├── location_repository.go
 │   │   ├── gallery_repository.go
 │   │   ├── review_repository.go
-│   │   └── discount_repository.go
-│   ├── services/                   # Lógica de negocio
+│   │   ├── discount_repository.go
+│   │   └── site_config_repository.go      # Colección site_config en Firebase
+│   ├── services/                          # 8 servicios + upload_service
 │   │   ├── auth_service.go
 │   │   ├── product_service.go
 │   │   ├── order_service.go
 │   │   ├── location_service.go
 │   │   ├── gallery_service.go
 │   │   ├── review_service.go
-│   │   └── discount_service.go
+│   │   ├── discount_service.go
+│   │   ├── site_config_service.go
+│   │   └── upload_service.go              # Cloudinary upload
 │   └── utils/
-│       ├── jwt.go                  # Generación y validación JWT
-│       ├── password.go             # Hashing bcrypt
-│       ├── response.go             # Respuestas HTTP estandarizadas
-│       └── validator.go            # Validación de structs
-├── .env                            # Variables de entorno
-├── go.mod
-├── go.sum
-├── CambiosAHacer.md               # Lista de tareas pendientes
-└── MigracionClaude.md             # Este archivo
+│       ├── jwt.go                         # Generación y validación JWT
+│       ├── password.go                    # Hashing bcrypt
+│       ├── response.go                    # Respuestas HTTP estandarizadas
+│       ├── validator.go                   # Validación de structs
+│       └── order_number.go               # Generación de números de orden
+├── .env                                   # Variables de entorno (NO commitear)
+├── .env.example                           # Template con documentación
+├── .dockerignore                          # Exclusiones para Docker build
+├── firebase-credentials.json              # Credenciales Firebase (NO commitear)
+├── Dockerfile                             # Multi-stage build para Render
+├── Cheos_Cafe_API.postman_collection.json
+├── go.mod / go.sum
+├── README.md
+├── MigracionClaude.md                     # Este archivo
+└── ContextoSesion.md                      # Contexto detallado de la última sesión
 ```
 
 ---
 
-## 🔧 Tecnologías y Dependencias
+## API Endpoints (46 totales)
 
-### Stack Tecnológico:
-- **Go 1.21+**
-- **Gin Web Framework** - HTTP routing y middleware
-- **Firebase Admin SDK** - Firestore database
-- **JWT (golang-jwt/jwt)** - Autenticación
-- **bcrypt** - Hashing de contraseñas
-- **UUID** - Identificadores únicos
-- **Redis (opcional)** - Cache (actualmente no conectado)
+### Health Checks (3)
+```
+GET  /health
+GET  /health/firebase
+GET  /health/redis
+```
 
-### Variables de Entorno (.env):
-```env
-PORT=8080
-JWT_SECRET=tu-secret-key
-FIREBASE_CREDENTIALS_PATH=path/to/serviceAccountKey.json
-REDIS_HOST=localhost:6379
+### Auth (5)
+```
+POST /api/v1/auth/register          (público)
+POST /api/v1/auth/login             (público, rate limited: 5 intentos/15min)
+POST /api/v1/auth/refresh           (público)
+POST /api/v1/auth/logout            (público)
+GET  /api/v1/ping                   (público)
+```
+
+### Users (5)
+```
+GET  /api/v1/users/me               (usuario)
+PUT  /api/v1/users/me               (usuario) - solo nombre y teléfono
+GET  /api/v1/users                  (admin)
+PUT  /api/v1/users/:id              (admin) - nombre, email, password, rol, is_active
+DELETE /api/v1/users/:id            (admin) - hard delete
+```
+
+### Products (8)
+```
+GET    /api/v1/products             (público)
+GET    /api/v1/products/featured    (público)
+GET    /api/v1/products/search?q=   (público)
+GET    /api/v1/products/:id         (público)
+POST   /api/v1/products             (admin)
+PUT    /api/v1/products/:id         (admin)
+DELETE /api/v1/products/:id         (admin)
+PATCH  /api/v1/products/:id/stock   (admin)
+```
+
+### Orders (7)
+```
+POST  /api/v1/orders                (público - guest checkout)
+GET   /api/v1/orders/number/:number (público)
+GET   /api/v1/orders/me             (usuario)
+GET   /api/v1/orders/:id            (usuario)
+GET   /api/v1/orders                (admin)
+PATCH /api/v1/orders/:id/status     (admin)
+PATCH /api/v1/orders/:id/payment    (admin)
+```
+
+### Discounts (6)
+```
+POST   /api/v1/discounts/validate   (público)
+GET    /api/v1/discounts            (admin)
+POST   /api/v1/discounts            (admin)
+GET    /api/v1/discounts/:id        (admin)
+PUT    /api/v1/discounts/:id        (admin)
+DELETE /api/v1/discounts/:id        (admin)
+```
+
+### Reviews (6)
+```
+POST   /api/v1/reviews              (público)
+GET    /api/v1/products/:id/reviews (público)
+GET    /api/v1/reviews              (admin)
+GET    /api/v1/reviews/:id          (admin)
+PUT    /api/v1/reviews/:id          (admin)
+DELETE /api/v1/reviews/:id          (admin)
+```
+
+### Locations (6)
+```
+GET    /api/v1/locations            (público)
+GET    /api/v1/locations/all        (público)
+GET    /api/v1/locations/:id        (público)
+POST   /api/v1/locations            (admin)
+PUT    /api/v1/locations/:id        (admin)
+DELETE /api/v1/locations/:id        (admin)
+```
+
+### Gallery (8)
+```
+GET    /api/v1/gallery/active       (público)
+GET    /api/v1/gallery/type/:type   (público)
+GET    /api/v1/gallery/:id          (público)
+GET    /api/v1/gallery              (admin)
+POST   /api/v1/gallery              (admin)
+POST   /api/v1/gallery/upload       (admin)
+PUT    /api/v1/gallery/:id          (admin)
+DELETE /api/v1/gallery/:id          (admin)
+```
+
+### Site Config (2)
+```
+GET  /api/v1/config/carousel        (público)
+PUT  /api/v1/config/carousel        (admin) - body: {"images": ["url1", "url2", ...]}
 ```
 
 ---
 
-## 🚀 API Endpoints Disponibles
+## Datos Técnicos Importantes
 
-### 🔐 Autenticación (`/api/v1/auth`)
-| Método | Endpoint | Descripción | Auth |
-|--------|----------|-------------|------|
-| POST | `/register` | Registrar nuevo usuario | Público |
-| POST | `/login` | Iniciar sesión | Público |
-| POST | `/refresh` | Refrescar token | Público |
-| POST | `/logout` | Cerrar sesión | Público |
+### Credenciales de prueba
+- **Admin:** `admin@cheoscafe.com` / `Admin123!`
 
-### 👤 Usuarios (`/api/v1/users`)
-| Método | Endpoint | Descripción | Auth |
-|--------|----------|-------------|------|
-| GET | `/me` | Obtener perfil propio | Usuario |
-| PUT | `/me` | Actualizar perfil propio | Usuario |
-| **GET** | **`/`** | **Obtener todos los usuarios** | **Admin** |
-| **PUT** | **`/:id`** | **Actualizar usuario por ID** | **Admin** |
-| **DELETE** | **`/:id`** | **Eliminar usuario (hard delete)** | **Admin** |
+### Rate limiting
+- Global: 100 requests / 15 minutos por IP
+- Login: 5 intentos / 15 minutos por IP (mapa independiente)
 
-### 🛍️ Productos (`/api/v1/products`)
-| Método | Endpoint | Descripción | Auth |
-|--------|----------|-------------|------|
-| GET | `/` | Listar productos (paginado) | Público |
-| GET | `/:id` | Obtener producto por ID | Público |
-| GET | `/featured` | Productos destacados | Público |
-| GET | `/search?q=` | Buscar productos | Público |
-| POST | `/` | Crear producto | Admin |
-| PUT | `/:id` | Actualizar producto | Admin |
-| DELETE | `/:id` | **Eliminar producto (hard delete)** | Admin |
-| PATCH | `/:id/stock` | Actualizar stock | Admin |
+### Decisiones de diseño vigentes
+- **Hard Delete en TODO:** Todos los DELETE eliminan físicamente de Firebase
+- **UUIDs:** Se usan UUIDs en vez de auto-increment IDs
+- **JWT:** Access token 15min, refresh token 168h (7 días)
+- **Cloudinary:** Para subida de imágenes (cloud name: detib7vvw)
+- **Sin Redis:** El sistema funciona sin cache, Redis es opcional
+- **Firebase credentials:** Soporta archivo local o variable de entorno (para Render)
+- **Autenticación:** JWT en Cookie `access_token` o Header `Authorization: Bearer <token>`
 
-### 📦 Órdenes (`/api/v1/orders`)
-| Método | Endpoint | Descripción | Auth |
-|--------|----------|-------------|------|
-| POST | `/` | Crear orden | Público |
-| GET | `/number/:number` | Buscar por número | Público |
-| GET | `/me` | Mis órdenes | Usuario |
-| GET | `/:id` | Obtener orden por ID | Usuario |
-| GET | `/` | Todas las órdenes | Admin |
-| PATCH | `/:id/status` | Actualizar estado | Admin |
-| PATCH | `/:id/payment` | Actualizar pago | Admin |
-
-### 📍 Ubicaciones (`/api/v1/locations`)
-| Método | Endpoint | Descripción | Auth |
-|--------|----------|-------------|------|
-| GET | `/` | Ubicaciones activas | Público |
-| GET | `/all` | Todas las ubicaciones | Público |
-| GET | `/:id` | Obtener por ID | Público |
-| POST | `/` | Crear ubicación | Admin |
-| PUT | `/:id` | Actualizar ubicación | Admin |
-| DELETE | `/:id` | **Eliminar ubicación (hard delete)** | Admin |
-
-### 🖼️ Galería (`/api/v1/gallery`)
-| Método | Endpoint | Descripción | Auth |
-|--------|----------|-------------|------|
-| GET | `/active` | Imágenes activas | Público |
-| GET | `/type/:type` | Por tipo | Público |
-| GET | `/:id` | Obtener por ID | Público |
-| GET | `/` | Todas las imágenes | Admin |
-| POST | `/` | Crear imagen | Admin |
-| POST | `/upload` | Subir imagen | Admin |
-| PUT | `/:id` | Actualizar imagen | Admin |
-| DELETE | `/:id` | **Eliminar imagen (hard delete)** | Admin |
-
-### ⭐ Reseñas (`/api/v1/reviews`)
-| Método | Endpoint | Descripción | Auth |
-|--------|----------|-------------|------|
-| POST | `/` | Crear reseña | Público |
-| GET | `/` | Todas las reseñas | Admin |
-| GET | `/:id` | Obtener por ID | Admin |
-| GET | `/products/:id/reviews` | Reseñas de producto | Público |
-| PUT | `/:id` | Actualizar reseña | Admin |
-| DELETE | `/:id` | **Eliminar reseña (hard delete)** | Admin |
-
-### 🎟️ Descuentos (`/api/v1/discounts`)
-| Método | Endpoint | Descripción | Auth |
-|--------|----------|-------------|------|
-| POST | `/validate` | Validar código | Público |
-| GET | `/` | Todos los códigos | Admin |
-| POST | `/` | Crear código | Admin |
-| GET | `/:id` | Obtener por ID | Admin |
-| PUT | `/:id` | Actualizar código | Admin |
-| DELETE | `/:id` | **Eliminar código (hard delete)** | Admin |
+### Colecciones de Firebase
+- `users` - Usuarios
+- `products` - Productos
+- `orders` - Órdenes
+- `discounts` - Códigos de descuento
+- `reviews` - Reseñas
+- `locations` - Ubicaciones de tiendas
+- `gallery` - Imágenes de galería
+- `site_config` - Configuración del sitio (documento `carousel`)
 
 ---
 
-## 📝 Tareas Pendientes (CambiosAHacer.md)
+## Seguridad Implementada
 
-### 2. LOCACIONES ⚠️ PENDIENTE
-**Problema:** Los endpoints de locaciones siguen pidiendo token aunque deberían ser públicos.
-
-**Endpoints que deben ser públicos:**
-- `GET /api/v1/locations` ✅ (Ya está público)
-- `GET /api/v1/locations/all` ✅ (Ya está público)
-- `GET /api/v1/locations/:id` ✅ (Ya está público)
-
-**Acción:** Verificar en Postman si realmente piden token o si el problema ya está resuelto.
-
-### 3. ORDENES ⚠️ PENDIENTE
-**Problema:** Las órdenes se están enviando con un correo predeterminado aunque el usuario esté logueado.
-
-**Archivo a revisar:** `internal/handlers/order_handler.go` o `internal/services/order_service.go`
-
-**Acción:** Cuando un usuario esté autenticado, usar su email del JWT en lugar de un email predeterminado.
+- Hashing de contraseñas con bcrypt
+- JWT para autenticación (access + refresh tokens)
+- Validación de roles (ADMIN/CUSTOMER)
+- Validación de inputs con `validator`
+- Validación de email único
+- Cookies HttpOnly para tokens
+- Rate limiting independiente para login (5 intentos / 15 minutos)
+- Rate limiting global (100 req / 15 minutos)
+- CORS configurado para producción
 
 ---
 
-## 🔑 Modelos de Datos Principales
+## Pendiente
 
-### User
+1. **Email en órdenes:** Cuando un usuario autenticado crea una orden, se usa un email predeterminado en vez del email del JWT. Revisar `order_handler.go` / `order_service.go`.
+2. **Pasarela de pagos con Wompi:** Pendiente de integrar.
+3. **Funcionalidades adicionales del frontend:** Por definir.
+
+---
+
+## Notas para el Nuevo Claude
+
+- Backend desplegado en Render: `https://gobackend-cheos.onrender.com`
+- Frontend desplegado en Netlify: `https://cheoscafesena.netlify.app`
+- Firebase activo y conectado (proyecto: `golandbackend-cheos`)
+- El rate limiter del login es independiente del global (ya corregido)
+- Leer `ContextoSesion.md` para contexto detallado de la última sesión
+- Leer `README.md` del backend para documentación completa
+- La colección Postman está en `Cheos_Cafe_API.postman_collection.json`
+- **NUNCA usar Soft Delete** - Todos los DELETE deben ser físicos
+- **Usar el patrón Repository-Service-Handler** - Mantener la arquitectura en 3 capas
+- **Usar UUIDs** en lugar de auto-increment IDs
+- **Firebase es la única base de datos** - No hay SQL
+- El sistema operativo del entorno de desarrollo actual es Linux
+
+### Patrón para crear nuevos módulos (ejemplo: site_config)
+1. Crear modelo en `internal/models/`
+2. Crear repositorio en `internal/repository/`
+3. Crear servicio en `internal/services/`
+4. Crear handler en `internal/handlers/`
+5. Registrar en `cmd/api/main.go` (inicialización + rutas)
+
+### Admin-only routes usan dos middlewares:
 ```go
-type User struct {
-    ID        uuid.UUID `json:"id" firestore:"id"`
-    Email     string    `json:"email" firestore:"email"`
-    Password  string    `json:"-" firestore:"password"`
-    Name      string    `json:"name" firestore:"name"`
-    Phone     string    `json:"phone" firestore:"phone"`
-    Role      UserRole  `json:"role" firestore:"role"` // ADMIN | CUSTOMER
-    IsActive  bool      `json:"is_active" firestore:"is_active"`
-    CreatedAt time.Time `json:"created_at" firestore:"created_at"`
-    UpdatedAt time.Time `json:"updated_at" firestore:"updated_at"`
-}
-```
-
-### Product
-```go
-type Product struct {
-    ID          uuid.UUID `json:"id" firestore:"id"`
-    Name        string    `json:"name" firestore:"name"`
-    Description string    `json:"description" firestore:"description"`
-    Price       float64   `json:"price" firestore:"price"`
-    Weight      int       `json:"weight" firestore:"weight"`
-    Stock       int       `json:"stock" firestore:"stock"`
-    Category    string    `json:"category" firestore:"category"`
-    Images      []string  `json:"images" firestore:"images"`
-    IsActive    bool      `json:"is_active" firestore:"is_active"`
-    IsFeatured  bool      `json:"is_featured" firestore:"is_featured"`
-    CreatedAt   time.Time `json:"created_at" firestore:"created_at"`
-    UpdatedAt   time.Time `json:"updated_at" firestore:"updated_at"`
-}
-```
-
-### Location
-```go
-type Location struct {
-    ID         uuid.UUID `json:"id" firestore:"id"`
-    Name       string    `json:"name" firestore:"name"`
-    Address    string    `json:"address" firestore:"address"`
-    City       string    `json:"city" firestore:"city"`
-    Department string    `json:"department" firestore:"department"`
-    Phone      string    `json:"phone" firestore:"phone"`
-    Latitude   float64   `json:"latitude" firestore:"latitude"`
-    Longitude  float64   `json:"longitude" firestore:"longitude"`
-    MapIframe  string    `json:"map_iframe" firestore:"map_iframe"` // NUEVO
-    Schedule   *Schedule `json:"schedule" firestore:"schedule"`
-    IsActive   bool      `json:"is_active" firestore:"is_active"`
-    CreatedAt  time.Time `json:"created_at" firestore:"created_at"`
-    UpdatedAt  time.Time `json:"updated_at" firestore:"updated_at"`
-}
+adminGroup := group.Group("")
+adminGroup.Use(middleware.AuthMiddleware(cfg))
+adminGroup.Use(middleware.RequireAdmin())
 ```
 
 ---
 
-## 🧪 Cómo Probar el Proyecto
-
-### 1. Iniciar el servidor:
-```bash
-go run cmd/api/main.go
-```
-
-El servidor iniciará en `http://localhost:8080`
-
-### 2. Endpoints de prueba:
-```bash
-# Health check
-curl http://localhost:8080/health
-
-# Listar productos
-curl http://localhost:8080/api/v1/products
-
-# Login
-curl -X POST http://localhost:8080/api/v1/auth/login \
-  -H "Content-Type: application/json" \
-  -d '{"email":"admin@cheoscafe.com","password":"Admin123456"}'
-```
-
-### 3. Usuarios de prueba en la base de datos:
-- **Admin:** `admin@cheoscafe.com` / `Admin123456`
-- **Admin 2:** `admin2024@cheoscafe.com` / `AdminPass123`
-- **Customer:** `customer@cheoscafe.com` / (contraseña desconocida)
-
----
-
-## ⚠️ Decisiones de Diseño Importantes
-
-### 1. Hard Delete en todos los endpoints
-**DECISIÓN RECIENTE:** Todos los DELETE ahora eliminan físicamente de Firebase.
-
-**Motivo:** Solicitud del cliente para que los registros no queden en la base de datos.
-
-**Impacto:** Los registros eliminados NO se pueden recuperar.
-
-### 2. Autenticación con cookies + headers
-El sistema acepta JWT tanto en:
-- Cookie `access_token`
-- Header `Authorization: Bearer <token>`
-
-### 3. Roles de usuario
-Solo hay 2 roles:
-- `CUSTOMER` - Usuario normal
-- `ADMIN` - Acceso total
-
-### 4. Firestore como única fuente de verdad
-No hay SQL, todo está en Firestore (NoSQL).
-
-### 5. Validación de emails únicos
-El sistema valida que no haya emails duplicados al registrar o actualizar usuarios.
-
----
-
-## 🐛 Problemas Conocidos
-
-### 1. Redis no conecta
-**Síntoma:** Warning al iniciar: "Failed to connect to Redis"
-
-**Estado:** NO CRÍTICO - El sistema continúa sin cache
-
-**Solución:** Instalar y ejecutar Redis, o ignorar el warning.
-
-### 2. Búsqueda de productos limitada
-**Problema:** Firestore no tiene búsqueda full-text.
-
-**Solución temporal:** Búsqueda básica implementada.
-
-**Solución futura:** Integrar Algolia o Elasticsearch.
-
-### 3. Índices de Firestore
-Algunos queries complejos requieren índices compuestos en Firestore.
-
-**Solución:** Firebase muestra el link del índice necesario en los errores.
-
----
-
-## 🔄 Comandos Git Útiles
-
-```bash
-# Ver estado actual
-git status
-
-# Ver últimos commits
-git log --oneline -10
-
-# Crear commit (NO uses commit --amend a menos que sea tu último commit)
-git add .
-git commit -m "Mensaje de commit"
-
-# Push a main
-git push origin main
-
-# Pull últimos cambios
-git pull origin main
-```
-
----
-
-## 📌 Notas Importantes para el Nuevo Claude
-
-1. **NUNCA uses Soft Delete** - Todos los DELETE deben ser físicos (Hard Delete)
-
-2. **Revisa CambiosAHacer.md** antes de empezar - Ahí están las tareas pendientes
-
-3. **Usa el patrón Repository-Service-Handler** - Mantén la arquitectura en 3 capas
-
-4. **Los endpoints públicos NO requieren auth** - Verifica que `AuthMiddleware` no esté aplicado
-
-5. **Admin-only routes** usan dos middlewares:
-   ```go
-   adminUsers := users.Group("")
-   adminUsers.Use(middleware.AuthMiddleware(cfg))
-   adminUsers.Use(middleware.RequireAdmin())
-   ```
-
-6. **Firebase es la única base de datos** - No hay SQL
-
-7. **JWT expira en 24 horas** - El refresh token en 7 días
-
-8. **Usa UUIDs** en lugar de auto-increment IDs
-
-9. **IMPORTANTE:** El servidor está en Windows, usa comandos compatibles:
-   - `taskkill //F //PID <pid>` para matar procesos
-   - `netstat -ano | findstr :8080` para encontrar procesos en puerto
-   - `go run cmd/api/main.go` para iniciar servidor
-
-10. **El proyecto YA está funcional** - Solo quedan tareas menores del CambiosAHacer.md
-
----
-
-## 🎯 Próximos Pasos Sugeridos
-
-1. **Verificar el problema de locaciones** (punto 2 de CambiosAHacer.md)
-2. **Arreglar el email en órdenes** (punto 3 de CambiosAHacer.md)
-3. **Probar todos los endpoints DELETE** para confirmar Hard Delete
-4. **Documentar en Postman** los 3 nuevos endpoints de usuarios
-5. **Crear pruebas unitarias** (opcional, no requerido actualmente)
-
----
-
-## 📞 Información de Contacto del Proyecto
-
-- **Cliente:** Cheos Café
-- **Tipo:** E-commerce backend
-- **Estado:** Desarrollo activo
-- **Fecha última actualización:** 2025-11-19
-
----
-
-## 🔐 Seguridad
-
-### Implementado:
-- ✅ Hashing de contraseñas con bcrypt
-- ✅ JWT para autenticación
-- ✅ Validación de roles (ADMIN/CUSTOMER)
-- ✅ Validación de inputs con `validator`
-- ✅ Validación de email único
-- ✅ Cookies HttpOnly para tokens
-
-### Por implementar:
-- ⚠️ Rate limiting
-- ⚠️ HTTPS en producción
-- ⚠️ Sanitización de inputs HTML
-- ⚠️ Logs de auditoría
-
----
-
-## 🚀 Deployment
-
-**NOTA:** Actualmente en desarrollo local. No hay deployment en producción.
-
-**Variables de entorno necesarias para producción:**
-```env
-PORT=8080
-JWT_SECRET=<secret-muy-seguro>
-FIREBASE_CREDENTIALS_PATH=/path/to/credentials.json
-REDIS_HOST=<redis-url>
-GIN_MODE=release
-```
-
----
-
-## 📚 Recursos Útiles
-
-- **Gin Framework:** https://gin-gonic.com/docs/
-- **Firebase Admin Go SDK:** https://firebase.google.com/docs/admin/setup
-- **JWT Go:** https://github.com/golang-jwt/jwt
-- **UUID:** https://github.com/google/uuid
-
----
-
-## ✅ Checklist de Migración
-
-Antes de continuar trabajando, verifica:
-
-- [ ] Go está instalado (1.21+)
-- [ ] Firebase credentials están configuradas
-- [ ] `.env` existe con las variables correctas
-- [ ] `go mod download` para instalar dependencias
-- [ ] `go run cmd/api/main.go` para iniciar servidor
-- [ ] Server responde en `http://localhost:8080/health`
-- [ ] Leer `CambiosAHacer.md` para ver tareas pendientes
-- [ ] Tener Postman o similar para probar endpoints
-
----
-
-**¡Bienvenido al proyecto! Todo está listo para continuar el desarrollo. Revisa primero el archivo `CambiosAHacer.md` para ver las tareas pendientes.** 🚀
+Fecha última actualización: 2026-02-11
