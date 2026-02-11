@@ -29,8 +29,8 @@ type User struct {
 
 type RegisterRequest struct {
 	Email    string   `json:"email" validate:"required,email"`
-	Password string   `json:"password" validate:"required,min=8"`
-	Name     string   `json:"name" validate:"required,min=2"`
+	Password string   `json:"password" validate:"required,min=6"`
+	Name     string   `json:"name" validate:"required,min=2,excludesall=0123456789"`
 	Phone    string   `json:"phone" validate:"required"`
 	Role     UserRole `json:"role" validate:"omitempty,oneof=CUSTOMER ADMIN"` // Opcional, por defecto CUSTOMER
 }
