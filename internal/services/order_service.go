@@ -13,12 +13,14 @@ import (
 type OrderService struct {
 	orderRepo   *repository.OrderRepository
 	productRepo *repository.ProductRepository
+	cartRepo    *repository.CartRepository
 }
 
-func NewOrderService(orderRepo *repository.OrderRepository, productRepo *repository.ProductRepository) *OrderService {
+func NewOrderService(orderRepo *repository.OrderRepository, productRepo *repository.ProductRepository, cartRepo *repository.CartRepository) *OrderService {
 	return &OrderService{
 		orderRepo:   orderRepo,
 		productRepo: productRepo,
+		cartRepo:    cartRepo,
 	}
 }
 
@@ -111,6 +113,11 @@ func (s *OrderService) CreateOrder(ctx context.Context, req *models.CreateOrderR
 		if err != nil {
 			return nil, fmt.Errorf("error al actualizar stock: %v", err)
 		}
+	}
+
+	// Vaciar carrito del usuario después de crear la orden
+	if userID != nil {
+		_ = s.cartRepo.Delete(ctx, *userID)
 	}
 
 	return &models.OrderWithItems{

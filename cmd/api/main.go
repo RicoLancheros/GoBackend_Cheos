@@ -70,11 +70,13 @@ func main() {
 	locationRepo := repository.NewLocationRepository(firebaseClient)
 	galleryRepo := repository.NewGalleryRepository(firebaseClient)
 	siteConfigRepo := repository.NewSiteConfigRepository(firebaseClient)
+	cartRepo := repository.NewCartRepository(firebaseClient)
 
 	// Initialize services
 	authService := services.NewAuthService(userRepo, cfg)
 	productService := services.NewProductService(productRepo)
-	orderService := services.NewOrderService(orderRepo, productRepo)
+	cartService := services.NewCartService(cartRepo, productRepo)
+	orderService := services.NewOrderService(orderRepo, productRepo, cartRepo)
 	discountService := services.NewDiscountService(discountRepo)
 	reviewService := services.NewReviewService(reviewRepo, productRepo)
 	locationService := services.NewLocationService(locationRepo)
@@ -97,6 +99,7 @@ func main() {
 	locationHandler := handlers.NewLocationHandler(locationService)
 	galleryHandler := handlers.NewGalleryHandler(galleryService, uploadService)
 	siteConfigHandler := handlers.NewSiteConfigHandler(siteConfigService)
+	cartHandler := handlers.NewCartHandler(cartService)
 
 	// Initialize Gin router
 	router := gin.Default()
@@ -109,7 +112,7 @@ func main() {
 	router.Use(middleware.RateLimiter(cfg.RateLimitRequests, rateLimitDuration))
 
 	// Setup routes
-	setupRoutes(router, cfg, firebaseClient, redisClient, authHandler, productHandler, orderHandler, discountHandler, reviewHandler, locationHandler, galleryHandler, siteConfigHandler, logger)
+	setupRoutes(router, cfg, firebaseClient, redisClient, authHandler, productHandler, orderHandler, discountHandler, reviewHandler, locationHandler, galleryHandler, siteConfigHandler, cartHandler, logger)
 
 	// Create HTTP server
 	srv := &http.Server{
@@ -161,6 +164,7 @@ func setupRoutes(
 	locationHandler *handlers.LocationHandler,
 	galleryHandler *handlers.GalleryHandler,
 	siteConfigHandler *handlers.SiteConfigHandler,
+	cartHandler *handlers.CartHandler,
 	logger *logrus.Logger,
 ) {
 	// Health check endpoints
@@ -376,6 +380,18 @@ func setupRoutes(
 			{
 				adminConfig.PUT("/carousel", siteConfigHandler.UpdateCarousel)
 			}
+		}
+
+		// Cart routes (authenticated users only)
+		cart := v1.Group("/cart")
+		cart.Use(middleware.AuthMiddleware(cfg))
+		{
+			cart.GET("", cartHandler.GetCart)
+			cart.POST("/items", cartHandler.AddItem)
+			cart.PUT("/items/:productId", cartHandler.UpdateItemQuantity)
+			cart.DELETE("/items/:productId", cartHandler.RemoveItem)
+			cart.DELETE("", cartHandler.ClearCart)
+			cart.POST("/sync", cartHandler.SyncCart)
 		}
 
 		// Test endpoint

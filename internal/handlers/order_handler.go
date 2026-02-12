@@ -31,9 +31,8 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 
 	// Obtener userID del contexto si está autenticado
 	var userID *uuid.UUID
-	if userIDStr, exists := c.Get("user_id"); exists {
-		id, err := uuid.Parse(userIDStr.(string))
-		if err == nil {
+	if userIDInterface, exists := c.Get("user_id"); exists {
+		if id, ok := userIDInterface.(uuid.UUID); ok {
 			userID = &id
 		}
 	}
