@@ -75,6 +75,11 @@ func getFieldMessage(field string, tag string, param string) string {
 		case "oneof":
 			return "El género debe ser uno de: MALE, FEMALE, OTHER"
 		}
+	case "Images":
+		switch tag {
+		case "max":
+			return fmt.Sprintf("No se permiten más de %s imágenes", param)
+		}
 	}
 
 	// Mensajes genéricos por tag (fallback para otros modelos)
