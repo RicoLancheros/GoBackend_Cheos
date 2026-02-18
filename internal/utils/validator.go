@@ -70,6 +70,11 @@ func getFieldMessage(field string, tag string, param string) string {
 		case "required":
 			return "El número de teléfono es obligatorio"
 		}
+	case "Gender":
+		switch tag {
+		case "oneof":
+			return "El género debe ser uno de: MALE, FEMALE, OTHER"
+		}
 	}
 
 	// Mensajes genéricos por tag (fallback para otros modelos)

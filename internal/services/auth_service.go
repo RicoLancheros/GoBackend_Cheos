@@ -49,12 +49,17 @@ func (s *AuthService) Register(ctx context.Context, req *models.RegisterRequest)
 
 	// Crear usuario
 	user := &models.User{
-		Email:    req.Email,
-		Password: hashedPassword,
-		Name:     req.Name,
-		Phone:    req.Phone,
-		Role:     role,
-		IsActive: true,
+		Email:        req.Email,
+		Password:     hashedPassword,
+		Name:         req.Name,
+		Phone:        req.Phone,
+		City:         req.City,
+		Municipality: req.Municipality,
+		Neighborhood: req.Neighborhood,
+		Gender:       req.Gender,
+		BirthDate:    req.BirthDate,
+		Role:         role,
+		IsActive:     true,
 	}
 
 	err = s.userRepo.Create(ctx, user)
@@ -204,6 +209,21 @@ func (s *AuthService) UpdateProfile(ctx context.Context, userID string, req *mod
 	if req.Phone != "" {
 		user.Phone = req.Phone
 	}
+	if req.City != nil {
+		user.City = req.City
+	}
+	if req.Municipality != nil {
+		user.Municipality = req.Municipality
+	}
+	if req.Neighborhood != nil {
+		user.Neighborhood = req.Neighborhood
+	}
+	if req.Gender != nil {
+		user.Gender = req.Gender
+	}
+	if req.BirthDate != nil {
+		user.BirthDate = req.BirthDate
+	}
 
 	err = s.userRepo.Update(ctx, user)
 	if err != nil {
@@ -263,6 +283,21 @@ func (s *AuthService) UpdateUserByID(ctx context.Context, userID string, req *mo
 			}
 			user.Email = *req.Email
 		}
+	}
+	if req.City != nil {
+		user.City = req.City
+	}
+	if req.Municipality != nil {
+		user.Municipality = req.Municipality
+	}
+	if req.Neighborhood != nil {
+		user.Neighborhood = req.Neighborhood
+	}
+	if req.Gender != nil {
+		user.Gender = req.Gender
+	}
+	if req.BirthDate != nil {
+		user.BirthDate = req.BirthDate
 	}
 	if req.Role != nil {
 		user.Role = *req.Role

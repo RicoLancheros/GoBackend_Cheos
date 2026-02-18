@@ -95,7 +95,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"email\": \"cliente@ejemplo.com\",\n  \"password\": \"Password123!\",\n  \"name\": \"Juan Pérez\",\n  \"phone\": \"3001234567\"\n}"
+							"raw": "{\n  \"email\": \"cliente@ejemplo.com\",\n  \"password\": \"Password123!\",\n  \"name\": \"Juan Pérez\",\n  \"phone\": \"3001234567\",\n  \"city\": \"Medellín\",\n  \"municipality\": \"Medellín\",\n  \"neighborhood\": \"El Poblado\",\n  \"gender\": \"MALE\",\n  \"birth_date\": \"1995-06-15\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/v1/auth/register",
@@ -236,7 +236,7 @@
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"name\": \"Juan Pérez Actualizado\",\n  \"phone\": \"3009876543\"\n}"
+							"raw": "{\n  \"name\": \"Juan Pérez Actualizado\",\n  \"phone\": \"3009876543\",\n  \"city\": \"Envigado\",\n  \"municipality\": \"Envigado\",\n  \"neighborhood\": \"Zuñiga\",\n  \"gender\": \"MALE\",\n  \"birth_date\": \"1995-06-15\"\n}"
 						},
 						"url": {
 							"raw": "{{base_url}}/api/v1/users/me",
