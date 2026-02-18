@@ -57,3 +57,42 @@ func (r *SiteConfigRepository) SetCarouselImages(ctx context.Context, images []s
 	})
 	return err
 }
+
+// GetAboutUs obtiene la configuración de "Sobre Nosotros"
+func (r *SiteConfigRepository) GetAboutUs(ctx context.Context) (string, []string, error) {
+	doc, err := r.firebase.Collection("site_config").Doc("about_us").Get(ctx)
+	if err != nil {
+		if status.Code(err) == codes.NotFound {
+			return "", []string{}, nil
+		}
+		return "", nil, err
+	}
+
+	data := doc.Data()
+
+	description := ""
+	if desc, ok := data["description"].(string); ok {
+		description = desc
+	}
+
+	images := []string{}
+	if rawImages, ok := data["images"].([]interface{}); ok {
+		for _, img := range rawImages {
+			if str, ok := img.(string); ok {
+				images = append(images, str)
+			}
+		}
+	}
+
+	return description, images, nil
+}
+
+// SetAboutUs guarda la configuración de "Sobre Nosotros"
+func (r *SiteConfigRepository) SetAboutUs(ctx context.Context, description string, images []string) error {
+	_, err := r.firebase.Collection("site_config").Doc("about_us").Set(ctx, map[string]interface{}{
+		"description": description,
+		"images":      images,
+		"updated_at":  time.Now(),
+	})
+	return err
+}

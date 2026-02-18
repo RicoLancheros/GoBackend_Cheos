@@ -90,10 +90,11 @@ func (h *GalleryHandler) GetImagesByType(c *gin.Context) {
 		models.ImageTypeProduct:    true,
 		models.ImageTypeBackground: true,
 		models.ImageTypeGeneral:    true,
+		models.ImageTypeAboutUs:    true,
 	}
 
 	if !validTypes[imageType] {
-		utils.ErrorResponse(c, http.StatusBadRequest, "Tipo de imagen inválido", "Los tipos válidos son: CAROUSEL, PRODUCT, BACKGROUND, GENERAL")
+		utils.ErrorResponse(c, http.StatusBadRequest, "Tipo de imagen inválido", "Los tipos válidos son: CAROUSEL, PRODUCT, BACKGROUND, GENERAL, ABOUT_US")
 		return
 	}
 

@@ -47,3 +47,37 @@ func (h *SiteConfigHandler) UpdateCarousel(c *gin.Context) {
 		"images": req.Images,
 	})
 }
+
+// GetAboutUs obtiene la configuración de "Sobre Nosotros" (público)
+func (h *SiteConfigHandler) GetAboutUs(c *gin.Context) {
+	aboutUs, err := h.service.GetAboutUs(c.Request.Context())
+	if err != nil {
+		utils.ErrorResponse(c, http.StatusInternalServerError, "Error al obtener Sobre Nosotros", err.Error())
+		return
+	}
+
+	utils.SuccessResponse(c, http.StatusOK, "Sobre Nosotros obtenido exitosamente", aboutUs)
+}
+
+// UpdateAboutUs actualiza la configuración de "Sobre Nosotros" (solo admin)
+func (h *SiteConfigHandler) UpdateAboutUs(c *gin.Context) {
+	var req models.UpdateAboutUsRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, "Datos inválidos", err.Error())
+		return
+	}
+
+	if err := utils.ValidateStruct(&req); err != nil {
+		utils.ValidationErrorResponse(c, utils.FormatValidationErrors(err))
+		return
+	}
+
+	if err := h.service.SetAboutUs(c.Request.Context(), req.Description, req.Images); err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, "Error al actualizar Sobre Nosotros", err.Error())
+		return
+	}
+
+	// Obtener los datos actualizados para retornar
+	aboutUs, _ := h.service.GetAboutUs(c.Request.Context())
+	utils.SuccessResponse(c, http.StatusOK, "Sobre Nosotros actualizado exitosamente", aboutUs)
+}

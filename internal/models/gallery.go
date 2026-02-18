@@ -14,6 +14,7 @@ const (
 	ImageTypeProduct    ImageType = "PRODUCT"    // Para productos
 	ImageTypeBackground ImageType = "BACKGROUND" // Fondos
 	ImageTypeGeneral    ImageType = "GENERAL"    // Uso general
+	ImageTypeAboutUs    ImageType = "ABOUT_US"   // Para sección About Us
 )
 
 type GalleryImage struct {
@@ -34,7 +35,7 @@ type CreateGalleryImageRequest struct {
 	URL         string    `json:"url" validate:"required,url"`
 	Title       string    `json:"title" validate:"omitempty,max=100"`
 	Description string    `json:"description" validate:"omitempty,max=500"`
-	ImageType   ImageType `json:"image_type" validate:"required,oneof=CAROUSEL PRODUCT BACKGROUND GENERAL"`
+	ImageType   ImageType `json:"image_type" validate:"required,oneof=CAROUSEL PRODUCT BACKGROUND GENERAL ABOUT_US"`
 	Tags        []string  `json:"tags" validate:"omitempty,dive,max=50"`
 }
 
@@ -42,7 +43,7 @@ type UpdateGalleryImageRequest struct {
 	URL         *string    `json:"url" validate:"omitempty,url"`
 	Title       *string    `json:"title" validate:"omitempty,max=100"`
 	Description *string    `json:"description" validate:"omitempty,max=500"`
-	ImageType   *ImageType `json:"image_type" validate:"omitempty,oneof=CAROUSEL PRODUCT BACKGROUND GENERAL"`
+	ImageType   *ImageType `json:"image_type" validate:"omitempty,oneof=CAROUSEL PRODUCT BACKGROUND GENERAL ABOUT_US"`
 	Tags        []string   `json:"tags" validate:"omitempty,dive,max=50"`
 	IsActive    *bool      `json:"is_active" validate:"omitempty"`
 }

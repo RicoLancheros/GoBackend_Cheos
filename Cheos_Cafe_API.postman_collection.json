@@ -2,7 +2,7 @@
 	"info": {
 		"_postman_id": "cheos-cafe-backend-001",
 		"name": "Cheos Cafe API",
-		"description": "Colección completa de endpoints para la API Backend de Cheos Café - Incluye Galería de Imágenes y Órdenes",
+		"description": "Coleccion completa de endpoints para la API Backend de Cheos Cafe - Incluye Autenticacion, Productos, Ordenes, Galeria, Descuentos, Reviews, Ubicaciones, Configuracion del Sitio (Carrusel + Sobre Nosotros) y Carrito de Compras",
 		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
 	},
 	"item": [
@@ -756,7 +756,7 @@
 								{
 									"key": "image_type",
 									"value": "GENERAL",
-									"description": "CAROUSEL | PRODUCT | BACKGROUND | GENERAL",
+									"description": "CAROUSEL | PRODUCT | BACKGROUND | GENERAL | ABOUT_US",
 									"type": "text"
 								}
 							]
@@ -837,6 +837,19 @@
 							"raw": "{{base_url}}/api/v1/gallery/type/CAROUSEL",
 							"host": ["{{base_url}}"],
 							"path": ["api", "v1", "gallery", "type", "CAROUSEL"]
+						}
+					},
+					"response": []
+				},
+				{
+					"name": "Get Images by Type - ABOUT_US (Public)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/gallery/type/ABOUT_US",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "gallery", "type", "ABOUT_US"]
 						}
 					},
 					"response": []
@@ -1397,6 +1410,258 @@
 								}
 							]
 						}
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Site Config",
+			"description": "Configuracion global del sitio: carrusel de imagenes y seccion Sobre Nosotros",
+			"item": [
+				{
+					"name": "Get Carousel (Public)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/config/carousel",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "config", "carousel"]
+						},
+						"description": "Obtiene las URLs de imagenes del carrusel principal. Retorna un array de URLs (maximo 6). No requiere autenticacion."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Carousel (Admin)",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"images\": [\n    \"https://res.cloudinary.com/detib7vvw/image/upload/v1/gallery/carousel1.jpg\",\n    \"https://res.cloudinary.com/detib7vvw/image/upload/v1/gallery/carousel2.jpg\",\n    \"https://res.cloudinary.com/detib7vvw/image/upload/v1/gallery/carousel3.jpg\"\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/config/carousel",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "config", "carousel"]
+						},
+						"description": "Actualiza las imagenes del carrusel. Maximo 6 URLs. Cada URL debe ser valida. Requiere token de admin."
+					},
+					"response": []
+				},
+				{
+					"name": "Get About Us (Public)",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/api/v1/config/about",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "config", "about"]
+						},
+						"description": "Obtiene la configuracion de la seccion 'Sobre Nosotros'. Retorna description (string) e images (array de URLs, maximo 6). No requiere autenticacion."
+					},
+					"response": []
+				},
+				{
+					"name": "Update About Us (Admin)",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"description\": \"Cheos Cafe es una empresa colombiana dedicada al cafe de especialidad. Con 8 sedes en Antioquia, ofrecemos la mejor experiencia cafetera desde 2018.\",\n  \"images\": [\n    \"https://res.cloudinary.com/detib7vvw/image/upload/v1/gallery/about1.jpg\",\n    \"https://res.cloudinary.com/detib7vvw/image/upload/v1/gallery/about2.jpg\"\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/config/about",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "config", "about"]
+						},
+						"description": "Actualiza la seccion 'Sobre Nosotros'. Soporta actualizacion parcial: puedes enviar solo 'description', solo 'images', o ambos. Las imagenes deben ser URLs validas (maximo 6). Se recomienda usar URLs de imagenes de la galeria con tipo ABOUT_US. Requiere token de admin."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Cart",
+			"description": "Carrito de compras persistente. Todos los endpoints requieren autenticacion (Bearer token). El carrito se guarda en Firebase asociado al usuario.",
+			"item": [
+				{
+					"name": "Get Cart",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/cart",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "cart"]
+						},
+						"description": "Obtiene el carrito del usuario autenticado. Retorna user_id, items (array con product_id, product_name, product_price, product_image, quantity) y updated_at. Si no tiene carrito, retorna items vacio."
+					},
+					"response": []
+				},
+				{
+					"name": "Add Item to Cart",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"product_id\": \"86f4183d-fc1d-4dc4-acec-4e6e68a16879\",\n  \"quantity\": 2\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/cart/items",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "cart", "items"]
+						},
+						"description": "Agrega un producto al carrito. Si el producto ya existe en el carrito, suma la cantidad. Valida que el producto exista y este activo. product_id (UUID) y quantity (minimo 1) son obligatorios."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Item Quantity",
+					"request": {
+						"method": "PUT",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"quantity\": 3\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/cart/items/:productId",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "cart", "items", ":productId"],
+							"variable": [
+								{
+									"key": "productId",
+									"value": "86f4183d-fc1d-4dc4-acec-4e6e68a16879"
+								}
+							]
+						},
+						"description": "Actualiza la cantidad de un producto en el carrito. quantity debe ser minimo 1. Si el producto no esta en el carrito, retorna error 404."
+					},
+					"response": []
+				},
+				{
+					"name": "Remove Item from Cart",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/cart/items/:productId",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "cart", "items", ":productId"],
+							"variable": [
+								{
+									"key": "productId",
+									"value": "86f4183d-fc1d-4dc4-acec-4e6e68a16879"
+								}
+							]
+						},
+						"description": "Elimina un producto del carrito por su product_id."
+					},
+					"response": []
+				},
+				{
+					"name": "Clear Cart",
+					"request": {
+						"method": "DELETE",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/cart",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "cart"]
+						},
+						"description": "Elimina todos los items del carrito del usuario. El carrito tambien se limpia automaticamente al crear una orden exitosa."
+					},
+					"response": []
+				},
+				{
+					"name": "Sync Cart (Login Merge)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"items\": [\n    {\n      \"product_id\": \"86f4183d-fc1d-4dc4-acec-4e6e68a16879\",\n      \"quantity\": 2\n    },\n    {\n      \"product_id\": \"7c9e4a3b-2f1d-4e5c-9b8a-1d3f6e8c9a2b\",\n      \"quantity\": 1\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/cart/sync",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "cart", "sync"]
+						},
+						"description": "Sincroniza el carrito local (invitado) con el carrito guardado del usuario al iniciar sesion. Fusiona los items: si un producto existe en ambos carritos, suma las cantidades. Valida que todos los productos existan y esten activos. Usar este endpoint inmediatamente despues del login si el usuario tenia items en el carrito como invitado."
 					},
 					"response": []
 				}

@@ -370,15 +370,17 @@ func setupRoutes(
 		// Site Config routes (carousel, etc.)
 		siteConfig := v1.Group("/config")
 		{
-			// Public: obtener carrusel
+			// Public: obtener carrusel y about us
 			siteConfig.GET("/carousel", siteConfigHandler.GetCarousel)
+			siteConfig.GET("/about", siteConfigHandler.GetAboutUs)
 
-			// Admin: actualizar carrusel
+			// Admin: actualizar carrusel y about us
 			adminConfig := siteConfig.Group("")
 			adminConfig.Use(middleware.AuthMiddleware(cfg))
 			adminConfig.Use(middleware.RequireAdmin())
 			{
 				adminConfig.PUT("/carousel", siteConfigHandler.UpdateCarousel)
+				adminConfig.PUT("/about", siteConfigHandler.UpdateAboutUs)
 			}
 		}
 
