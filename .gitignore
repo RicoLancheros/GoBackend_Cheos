@@ -19,6 +19,7 @@ go.work
 
 # Dependency directories
 vendor/
+plans/
 
 # Environment variables
 .env
