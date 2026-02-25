@@ -22,7 +22,7 @@ E-commerce SPA completo de venta de café molido de especialidad para **Cheos Ca
 ## Deployment Actual
 
 - **Backend:** Render (Docker) - `https://gobackend-cheos.onrender.com`
-- **Frontend:** Netlify - `https://cheoscafesena.netlify.app`
+- **Frontend:** Netlify - `https://cheoscafe.netlify.app`
 - **Firebase:** Proyecto `golandbackend-cheos` (activo y conectado)
 - Las credenciales de Firebase se pasan como variable de entorno `FIREBASE_CREDENTIALS_JSON` en Render (JSON completo como string)
 
@@ -36,7 +36,7 @@ JWT_SECRET=<secret seguro>
 JWT_REFRESH_SECRET=<secret seguro>
 JWT_EXPIRES_IN=15m
 JWT_REFRESH_EXPIRES_IN=168h
-CORS_ALLOWED_ORIGINS=https://cheoscafesena.netlify.app
+CORS_ALLOWED_ORIGINS=https://cheoscafe.netlify.app
 CLOUDINARY_CLOUD_NAME=detib7vvw
 CLOUDINARY_API_KEY=549224315686314
 CLOUDINARY_API_SECRET=<secret>
@@ -340,7 +340,7 @@ PUT  /api/v1/config/carousel        (admin) - body: {"images": ["url1", "url2", 
 ## Notas para el Nuevo Claude
 
 - Backend desplegado en Render: `https://gobackend-cheos.onrender.com`
-- Frontend desplegado en Netlify: `https://cheoscafesena.netlify.app`
+- Frontend desplegado en Netlify: `https://cheoscafe.netlify.app`
 - Firebase activo y conectado (proyecto: `golandbackend-cheos`)
 - El rate limiter del login es independiente del global (ya corregido)
 - Leer `ContextoSesion.md` para contexto detallado de la última sesión
