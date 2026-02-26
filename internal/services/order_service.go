@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 
 	"github.com/cheoscafe/backend/internal/models"
 	"github.com/cheoscafe/backend/internal/repository"
@@ -11,16 +12,18 @@ import (
 )
 
 type OrderService struct {
-	orderRepo   *repository.OrderRepository
-	productRepo *repository.ProductRepository
-	cartRepo    *repository.CartRepository
+	orderRepo        *repository.OrderRepository
+	productRepo      *repository.ProductRepository
+	cartRepo         *repository.CartRepository
+	dashboardService *DashboardService
 }
 
-func NewOrderService(orderRepo *repository.OrderRepository, productRepo *repository.ProductRepository, cartRepo *repository.CartRepository) *OrderService {
+func NewOrderService(orderRepo *repository.OrderRepository, productRepo *repository.ProductRepository, cartRepo *repository.CartRepository, dashboardService *DashboardService) *OrderService {
 	return &OrderService{
-		orderRepo:   orderRepo,
-		productRepo: productRepo,
-		cartRepo:    cartRepo,
+		orderRepo:        orderRepo,
+		productRepo:      productRepo,
+		cartRepo:         cartRepo,
+		dashboardService: dashboardService,
 	}
 }
 
@@ -118,6 +121,13 @@ func (s *OrderService) CreateOrder(ctx context.Context, req *models.CreateOrderR
 	// Vaciar carrito del usuario después de crear la orden
 	if userID != nil {
 		_ = s.cartRepo.Delete(ctx, *userID)
+	}
+
+	// Actualizar metricas del dashboard
+	if s.dashboardService != nil {
+		if err := s.dashboardService.OnOrderCreated(ctx, order, savedItems); err != nil {
+			log.Printf("Error actualizando metricas de dashboard: %v", err)
+		}
 	}
 
 	return &models.OrderWithItems{
@@ -283,6 +293,13 @@ func (s *OrderService) UpdateOrderStatus(ctx context.Context, id uuid.UUID, req 
 			if err != nil {
 				return nil, fmt.Errorf("error al devolver stock: %v", err)
 			}
+		}
+	}
+
+	// Actualizar metricas del dashboard
+	if s.dashboardService != nil {
+		if err := s.dashboardService.OnOrderStatusChanged(ctx, order, order.Status, req.Status); err != nil {
+			log.Printf("Error actualizando metricas de dashboard: %v", err)
 		}
 	}
 

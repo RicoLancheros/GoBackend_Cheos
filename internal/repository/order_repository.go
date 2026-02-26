@@ -306,3 +306,38 @@ func (r *OrderRepository) CountOrdersByUserID(ctx context.Context, userID uuid.U
 
 	return count, nil
 }
+
+// GetOrdersByDateRange obtiene ordenes dentro de un rango de fechas
+func (r *OrderRepository) GetOrdersByDateRange(ctx context.Context, startDate, endDate time.Time) ([]*models.Order, error) {
+	iter := r.firebase.Collection("orders").
+		Where("created_at", ">=", startDate).
+		Where("created_at", "<", endDate).
+		Documents(ctx)
+	defer iter.Stop()
+
+	var orders []*models.Order
+	for {
+		doc, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		var order models.Order
+		if err := doc.DataTo(&order); err != nil {
+			continue
+		}
+
+		orderID, err := uuid.Parse(doc.Ref.ID)
+		if err != nil {
+			continue
+		}
+		order.ID = orderID
+
+		orders = append(orders, &order)
+	}
+
+	return orders, nil
+}

@@ -72,11 +72,15 @@ func main() {
 	siteConfigRepo := repository.NewSiteConfigRepository(firebaseClient)
 	cartRepo := repository.NewCartRepository(firebaseClient)
 
+	// Initialize repositories (dashboard)
+	dashboardRepo := repository.NewDashboardRepository(firebaseClient)
+
 	// Initialize services
 	authService := services.NewAuthService(userRepo, cfg)
 	productService := services.NewProductService(productRepo)
 	cartService := services.NewCartService(cartRepo, productRepo)
-	orderService := services.NewOrderService(orderRepo, productRepo, cartRepo)
+	dashboardService := services.NewDashboardService(dashboardRepo, orderRepo, userRepo)
+	orderService := services.NewOrderService(orderRepo, productRepo, cartRepo, dashboardService)
 	discountService := services.NewDiscountService(discountRepo)
 	reviewService := services.NewReviewService(reviewRepo, productRepo)
 	locationService := services.NewLocationService(locationRepo)
@@ -100,6 +104,7 @@ func main() {
 	galleryHandler := handlers.NewGalleryHandler(galleryService, uploadService)
 	siteConfigHandler := handlers.NewSiteConfigHandler(siteConfigService)
 	cartHandler := handlers.NewCartHandler(cartService)
+	dashboardHandler := handlers.NewDashboardHandler(dashboardService)
 
 	// Initialize Gin router
 	router := gin.Default()
@@ -112,7 +117,7 @@ func main() {
 	router.Use(middleware.RateLimiter(cfg.RateLimitRequests, rateLimitDuration))
 
 	// Setup routes
-	setupRoutes(router, cfg, firebaseClient, redisClient, authHandler, productHandler, orderHandler, discountHandler, reviewHandler, locationHandler, galleryHandler, siteConfigHandler, cartHandler, logger)
+	setupRoutes(router, cfg, firebaseClient, redisClient, authHandler, productHandler, orderHandler, discountHandler, reviewHandler, locationHandler, galleryHandler, siteConfigHandler, cartHandler, dashboardHandler, logger)
 
 	// Create HTTP server
 	srv := &http.Server{
@@ -165,6 +170,7 @@ func setupRoutes(
 	galleryHandler *handlers.GalleryHandler,
 	siteConfigHandler *handlers.SiteConfigHandler,
 	cartHandler *handlers.CartHandler,
+	dashboardHandler *handlers.DashboardHandler,
 	logger *logrus.Logger,
 ) {
 	// Health check endpoints
@@ -394,6 +400,21 @@ func setupRoutes(
 			cart.DELETE("/items/:productId", cartHandler.RemoveItem)
 			cart.DELETE("", cartHandler.ClearCart)
 			cart.POST("/sync", cartHandler.SyncCart)
+		}
+
+		// Dashboard routes (admin only)
+		dashboard := v1.Group("/dashboard")
+		dashboard.Use(middleware.AuthMiddleware(cfg))
+		dashboard.Use(middleware.RequireAdmin())
+		{
+			dashboard.GET("/sales/monthly", dashboardHandler.GetSalesMonthly)
+			dashboard.GET("/sales/yearly", dashboardHandler.GetSalesYearly)
+			dashboard.GET("/buyers/monthly", dashboardHandler.GetBuyersMonthly)
+			dashboard.GET("/buyers/yearly", dashboardHandler.GetBuyersYearly)
+			dashboard.GET("/products/monthly", dashboardHandler.GetTopProductsMonthly)
+			dashboard.GET("/products/yearly", dashboardHandler.GetTopProductsYearly)
+			dashboard.GET("/summary", dashboardHandler.GetSummary)
+			dashboard.POST("/recalculate", dashboardHandler.RecalculateMonth)
 		}
 
 		// Test endpoint

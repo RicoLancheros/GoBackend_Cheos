@@ -1666,6 +1666,197 @@
 					"response": []
 				}
 			]
+		},
+		{
+			"name": "Dashboard - Metricas",
+			"description": "Metricas y estadisticas del negocio. Todos los endpoints requieren autenticacion de ADMIN.",
+			"item": [
+				{
+					"name": "Get Sales Monthly (Admin)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/dashboard/sales/monthly?year=2026&month=2",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "dashboard", "sales", "monthly"],
+							"query": [
+								{ "key": "year", "value": "2026" },
+								{ "key": "month", "value": "2" }
+							]
+						},
+						"description": "Obtiene las metricas de ventas de un mes especifico. Incluye: total_revenue, total_orders, completed_orders, cancelled_orders, pending_orders, average_ticket, total_discount_given, orders_with_discount, payment_methods (desglose), daily_breakdown (ventas por dia)."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Sales Yearly (Admin)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/dashboard/sales/yearly?year=2026",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "dashboard", "sales", "yearly"],
+							"query": [
+								{ "key": "year", "value": "2026" }
+							]
+						},
+						"description": "Obtiene las metricas de ventas del año completo. Incluye: total_revenue, total_orders, completed_orders, cancelled_orders, average_ticket, monthly_breakdown (ventas por mes)."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Buyers Monthly (Admin)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/dashboard/buyers/monthly?year=2026&month=2",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "dashboard", "buyers", "monthly"],
+							"query": [
+								{ "key": "year", "value": "2026" },
+								{ "key": "month", "value": "2" }
+							]
+						},
+						"description": "Estadisticas de compradores del mes. Incluye: total_buyers, registered_buyers, guest_buyers, new_registered_this_month, returning_buyers, gender_breakdown (MALE/FEMALE/OTHER/UNKNOWN), age_breakdown (18-24, 25-34, 35-44, 45-54, 55+, unknown), city_breakdown."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Buyers Yearly (Admin)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/dashboard/buyers/yearly?year=2026",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "dashboard", "buyers", "yearly"],
+							"query": [
+								{ "key": "year", "value": "2026" }
+							]
+						},
+						"description": "Estadisticas de compradores del año completo. Incluye: total_unique_buyers, registered_buyers, guest_buyers, gender_breakdown, age_breakdown."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Top Products Monthly (Admin)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/dashboard/products/monthly?year=2026&month=2",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "dashboard", "products", "monthly"],
+							"query": [
+								{ "key": "year", "value": "2026" },
+								{ "key": "month", "value": "2" }
+							]
+						},
+						"description": "Top productos del mes. Incluye: most_sold (top 10 mas vendidos), least_sold (top 10 menos vendidos), all_products (mapa completo con quantity, revenue, orders por producto)."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Top Products Yearly (Admin)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/dashboard/products/yearly?year=2026",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "dashboard", "products", "yearly"],
+							"query": [
+								{ "key": "year", "value": "2026" }
+							]
+						},
+						"description": "Top productos del año completo. Misma estructura que el mensual pero acumulado anual."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Dashboard Summary (Admin)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/dashboard/summary",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "dashboard", "summary"]
+						},
+						"description": "Resumen general del dashboard. Retorna un objeto consolidado con los datos del mes actual y año actual: revenue, orders, average_ticket, new_buyers, top_products, gender_breakdown, age_breakdown. Ideal para la vista principal del dashboard."
+					},
+					"response": []
+				},
+				{
+					"name": "Recalculate Metrics (Admin)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Authorization",
+								"value": "Bearer {{access_token}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/api/v1/dashboard/recalculate?year=2026&month=2",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "dashboard", "recalculate"],
+							"query": [
+								{ "key": "year", "value": "2026" },
+								{ "key": "month", "value": "2" }
+							]
+						},
+						"description": "Recalcula las metricas del mes especificado desde cero. Recorre TODAS las ordenes del periodo y reconstruye los 6 documentos de metricas (mensuales + anuales). Usar solo cuando haya inconsistencias o para generar metricas de meses pasados. Proceso pesado, uso ocasional."
+					},
+					"response": []
+				}
+			]
 		}
 	],
 	"event": [
