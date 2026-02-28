@@ -35,7 +35,6 @@ func (r *OrderRepository) Create(ctx context.Context, order *models.Order) error
 	order.CreatedAt = now
 	order.UpdatedAt = now
 
-	// Generate order number if not exists
 	if order.OrderNumber == "" {
 		order.OrderNumber = fmt.Sprintf("ORD-%s", order.ID.String()[:8])
 	}
@@ -111,7 +110,7 @@ func (r *OrderRepository) GetByOrderNumber(ctx context.Context, orderNumber stri
 	return &order, nil
 }
 
-// GetByUserID obtiene órdenes de un usuario
+// GetByUserID obtiene órdenes de un usuario con paginación
 func (r *OrderRepository) GetByUserID(ctx context.Context, userID uuid.UUID, limit int, offset int) ([]*models.Order, error) {
 	query := r.firebase.Collection("orders").
 		Where("user_id", "==", userID).
@@ -148,7 +147,7 @@ func (r *OrderRepository) GetByUserID(ctx context.Context, userID uuid.UUID, lim
 	return orders, nil
 }
 
-// GetAll obtiene todas las órdenes con paginación
+// GetAll obtiene todas las órdenes con paginación (sin filtro)
 func (r *OrderRepository) GetAll(ctx context.Context, limit int, offset int) ([]*models.Order, error) {
 	query := r.firebase.Collection("orders").
 		OrderBy("created_at", firestore.Desc).
@@ -156,6 +155,40 @@ func (r *OrderRepository) GetAll(ctx context.Context, limit int, offset int) ([]
 		Offset(offset)
 
 	iter := query.Documents(ctx)
+	defer iter.Stop()
+
+	var orders []*models.Order
+	for {
+		doc, err := iter.Next()
+		if err == iterator.Done {
+			break
+		}
+		if err != nil {
+			return nil, err
+		}
+
+		var order models.Order
+		if err := doc.DataTo(&order); err != nil {
+			continue
+		}
+
+		orderID, err := uuid.Parse(doc.Ref.ID)
+		if err != nil {
+			continue
+		}
+		order.ID = orderID
+
+		orders = append(orders, &order)
+	}
+
+	return orders, nil
+}
+
+// GetAllUnpaginated obtiene TODAS las órdenes sin límite para filtrar en el servicio
+func (r *OrderRepository) GetAllUnpaginated(ctx context.Context) ([]*models.Order, error) {
+	iter := r.firebase.Collection("orders").
+		OrderBy("created_at", firestore.Desc).
+		Documents(ctx)
 	defer iter.Stop()
 
 	var orders []*models.Order

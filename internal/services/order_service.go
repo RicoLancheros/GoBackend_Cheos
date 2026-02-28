@@ -29,37 +29,30 @@ func NewOrderService(orderRepo *repository.OrderRepository, productRepo *reposit
 
 // CreateOrder crea una nueva orden
 func (s *OrderService) CreateOrder(ctx context.Context, req *models.CreateOrderRequest, userID *uuid.UUID) (*models.OrderWithItems, error) {
-	// Validar que haya items
 	if len(req.Items) == 0 {
 		return nil, errors.New("la orden debe tener al menos un producto")
 	}
 
-	// Calcular subtotal y validar productos
 	var subtotal float64
 	var orderItems []models.OrderItem
 
 	for _, itemReq := range req.Items {
-		// Obtener producto
 		product, err := s.productRepo.GetByID(ctx, itemReq.ProductID)
 		if err != nil {
 			return nil, fmt.Errorf("producto %s no encontrado", itemReq.ProductID)
 		}
 
-		// Validar stock
 		if product.Stock < itemReq.Quantity {
 			return nil, fmt.Errorf("stock insuficiente para el producto %s", product.Name)
 		}
 
-		// Validar que el producto esté activo
 		if !product.IsActive {
 			return nil, fmt.Errorf("el producto %s no está disponible", product.Name)
 		}
 
-		// Calcular subtotal del item
 		itemSubtotal := product.Price * float64(itemReq.Quantity)
 		subtotal += itemSubtotal
 
-		// Crear item de orden (sin ID aún, se creará después)
 		orderItem := models.OrderItem{
 			ProductID:   product.ID,
 			ProductName: product.Name,
@@ -71,13 +64,9 @@ func (s *OrderService) CreateOrder(ctx context.Context, req *models.CreateOrderR
 		orderItems = append(orderItems, orderItem)
 	}
 
-	// Aplicar descuento si existe (por ahora 0, se implementará con discount codes)
 	discount := 0.0
-
-	// Calcular total
 	total := subtotal - discount
 
-	// Crear orden
 	order := &models.Order{
 		UserID:          userID,
 		CustomerName:    req.CustomerName,
@@ -95,13 +84,11 @@ func (s *OrderService) CreateOrder(ctx context.Context, req *models.CreateOrderR
 		UTMCampaign:     req.UTMCampaign,
 	}
 
-	// Guardar orden
 	err := s.orderRepo.Create(ctx, order)
 	if err != nil {
 		return nil, err
 	}
 
-	// Guardar items de la orden
 	var savedItems []models.OrderItem
 	for _, item := range orderItems {
 		item.OrderID = order.ID
@@ -111,19 +98,16 @@ func (s *OrderService) CreateOrder(ctx context.Context, req *models.CreateOrderR
 		}
 		savedItems = append(savedItems, item)
 
-		// Reducir stock del producto
 		err = s.productRepo.UpdateStock(ctx, item.ProductID, -item.Quantity)
 		if err != nil {
 			return nil, fmt.Errorf("error al actualizar stock: %v", err)
 		}
 	}
 
-	// Vaciar carrito del usuario después de crear la orden
 	if userID != nil {
 		_ = s.cartRepo.Delete(ctx, *userID)
 	}
 
-	// Actualizar metricas del dashboard
 	if s.dashboardService != nil {
 		if err := s.dashboardService.OnOrderCreated(ctx, order, savedItems); err != nil {
 			log.Printf("Error actualizando metricas de dashboard: %v", err)
@@ -223,39 +207,68 @@ func (s *OrderService) GetUserOrders(ctx context.Context, userID uuid.UUID, page
 }
 
 // GetAllOrders obtiene todas las órdenes (solo admin)
-func (s *OrderService) GetAllOrders(ctx context.Context, page int, pageSize int) (*models.OrderListResponse, error) {
+// statusGroup: "" = todas, "active" = activas, "completed" = DELIVERED o CANCELLED
+func (s *OrderService) GetAllOrders(ctx context.Context, page int, pageSize int, statusGroup string) (*models.OrderListResponse, error) {
 	if page < 1 {
 		page = 1
 	}
-	if pageSize < 1 || pageSize > 100 {
+	if pageSize < 1 || pageSize > 500 {
 		pageSize = 10
 	}
 
+	// Traemos todo sin paginar y filtramos en memoria
+	// (Firestore no soporta WHERE status NOT IN de forma simple)
+	allOrders, err := s.orderRepo.GetAllUnpaginated(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	completedStatuses := map[models.OrderStatus]bool{
+		models.OrderDelivered: true,
+		models.OrderCancelled: true,
+	}
+
+	var filtered []models.Order
+	for _, o := range allOrders {
+		isCompleted := completedStatuses[o.Status]
+		switch statusGroup {
+		case "active":
+			if !isCompleted {
+				filtered = append(filtered, *o)
+			}
+		case "completed":
+			if isCompleted {
+				filtered = append(filtered, *o)
+			}
+		default:
+			filtered = append(filtered, *o)
+		}
+	}
+
+	total := len(filtered)
+
+	// Paginar en memoria
 	offset := (page - 1) * pageSize
-
-	orders, err := s.orderRepo.GetAll(ctx, pageSize, offset)
-	if err != nil {
-		return nil, err
+	if offset > total {
+		offset = total
 	}
-
-	total, err := s.orderRepo.CountOrders(ctx)
-	if err != nil {
-		return nil, err
+	end := offset + pageSize
+	if end > total {
+		end = total
 	}
+	paginated := filtered[offset:end]
 
-	totalPages := int(total) / pageSize
-	if int(total)%pageSize != 0 {
+	totalPages := total / pageSize
+	if total%pageSize != 0 {
 		totalPages++
 	}
-
-	var ordersList []models.Order
-	for _, order := range orders {
-		ordersList = append(ordersList, *order)
+	if totalPages == 0 {
+		totalPages = 1
 	}
 
 	return &models.OrderListResponse{
-		Orders:     ordersList,
-		Total:      int(total),
+		Orders:     paginated,
+		Total:      total,
 		Page:       page,
 		PageSize:   pageSize,
 		TotalPages: totalPages,
@@ -264,24 +277,20 @@ func (s *OrderService) GetAllOrders(ctx context.Context, page int, pageSize int)
 
 // UpdateOrderStatus actualiza el estado de una orden
 func (s *OrderService) UpdateOrderStatus(ctx context.Context, id uuid.UUID, req *models.UpdateOrderStatusRequest) (*models.Order, error) {
-	// Verificar que la orden existe
 	order, err := s.orderRepo.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 
-	// Validar transiciones de estado
 	if !s.isValidStatusTransition(order.Status, req.Status) {
 		return nil, fmt.Errorf("transición de estado inválida de %s a %s", order.Status, req.Status)
 	}
 
-	// Actualizar estado
 	err = s.orderRepo.UpdateStatus(ctx, id, req.Status)
 	if err != nil {
 		return nil, err
 	}
 
-	// Si el estado es cancelado, devolver stock
 	if req.Status == models.OrderCancelled {
 		items, err := s.orderRepo.GetItemsByOrderID(ctx, id)
 		if err != nil {
@@ -296,40 +305,36 @@ func (s *OrderService) UpdateOrderStatus(ctx context.Context, id uuid.UUID, req 
 		}
 	}
 
-	// Actualizar metricas del dashboard
 	if s.dashboardService != nil {
 		if err := s.dashboardService.OnOrderStatusChanged(ctx, order, order.Status, req.Status); err != nil {
 			log.Printf("Error actualizando metricas de dashboard: %v", err)
 		}
 	}
 
-	// Obtener orden actualizada
 	return s.orderRepo.GetByID(ctx, id)
 }
 
 // UpdatePaymentStatus actualiza el estado de pago
 func (s *OrderService) UpdatePaymentStatus(ctx context.Context, id uuid.UUID, req *models.UpdatePaymentStatusRequest) (*models.Order, error) {
-	// Verificar que la orden existe
-	_, err := s.orderRepo.GetByID(ctx, id)
+	order, err := s.orderRepo.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 
-	// Actualizar estado de pago
 	err = s.orderRepo.UpdatePaymentStatus(ctx, id, req.PaymentStatus, nil)
 	if err != nil {
 		return nil, err
 	}
 
-	// Si el pago fue aprobado, actualizar estado de la orden a confirmado
-	if req.PaymentStatus == models.PaymentApproved {
+	// Auto-avanzar a CONFIRMED solo si está en PENDING (flujo MercadoPago/Wompi)
+	// Para contra entrega ya habrá avanzado, no se toca el status
+	if req.PaymentStatus == models.PaymentApproved && order.Status == models.OrderPending {
 		err = s.orderRepo.UpdateStatus(ctx, id, models.OrderConfirmed)
 		if err != nil {
 			return nil, err
 		}
 	}
 
-	// Obtener orden actualizada
 	return s.orderRepo.GetByID(ctx, id)
 }
 

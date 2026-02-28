@@ -29,7 +29,6 @@ func (h *OrderHandler) CreateOrder(c *gin.Context) {
 		return
 	}
 
-	// Obtener userID del contexto si está autenticado
 	var userID *uuid.UUID
 	if userIDInterface, exists := c.Get("user_id"); exists {
 		if id, ok := userIDInterface.(uuid.UUID); ok {
@@ -85,7 +84,6 @@ func (h *OrderHandler) GetUserOrders(c *gin.Context) {
 		return
 	}
 
-	// El middleware auth guarda el user_id como uuid.UUID, no como string
 	userID, ok := userIDInterface.(uuid.UUID)
 	if !ok {
 		utils.ErrorResponse(c, http.StatusBadRequest, "ID de usuario inválido", "invalid user_id type")
@@ -105,11 +103,16 @@ func (h *OrderHandler) GetUserOrders(c *gin.Context) {
 }
 
 // GetAllOrders obtiene todas las órdenes (solo admin)
+// Query params:
+//   - page      int    (default 1)
+//   - page_size int    (default 10)
+//   - status    string "active" | "completed" | "" (todas)
 func (h *OrderHandler) GetAllOrders(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
+	statusGroup := c.DefaultQuery("status", "") // "active", "completed", o vacío = todas
 
-	orders, err := h.orderService.GetAllOrders(c.Request.Context(), page, pageSize)
+	orders, err := h.orderService.GetAllOrders(c.Request.Context(), page, pageSize, statusGroup)
 	if err != nil {
 		utils.ErrorResponse(c, http.StatusInternalServerError, "Error al obtener órdenes", err.Error())
 		return
