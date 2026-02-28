@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"log"
 	"time"
 
 	"github.com/cheoscafe/backend/internal/config"
@@ -26,7 +27,6 @@ func NewAuthService(userRepo *repository.UserRepository, cfg *config.Config) *Au
 
 // Register registra un nuevo usuario
 func (s *AuthService) Register(ctx context.Context, req *models.RegisterRequest) (*models.User, error) {
-	// Verificar si el email ya existe
 	exists, err := s.userRepo.EmailExists(ctx, req.Email)
 	if err != nil {
 		return nil, err
@@ -35,19 +35,16 @@ func (s *AuthService) Register(ctx context.Context, req *models.RegisterRequest)
 		return nil, errors.New("el email ya está registrado")
 	}
 
-	// Hashear la contraseña
 	hashedPassword, err := utils.HashPassword(req.Password)
 	if err != nil {
 		return nil, err
 	}
 
-	// Determinar rol (por defecto CUSTOMER)
 	role := models.RoleCustomer
 	if req.Role != "" {
 		role = req.Role
 	}
 
-	// Crear usuario
 	user := &models.User{
 		Email:        req.Email,
 		Password:     hashedPassword,
@@ -67,31 +64,25 @@ func (s *AuthService) Register(ctx context.Context, req *models.RegisterRequest)
 		return nil, err
 	}
 
-	// Limpiar contraseña antes de devolver
 	user.Password = ""
-
 	return user, nil
 }
 
 // Login autentica un usuario
 func (s *AuthService) Login(ctx context.Context, req *models.LoginRequest) (*models.LoginResponse, error) {
-	// Buscar usuario por email
 	user, err := s.userRepo.GetByEmail(ctx, req.Email)
 	if err != nil {
 		return nil, errors.New("credenciales inválidas")
 	}
 
-	// Verificar que el usuario esté activo
 	if !user.IsActive {
 		return nil, errors.New("usuario inactivo")
 	}
 
-	// Verificar contraseña
 	if !utils.CheckPassword(req.Password, user.Password) {
 		return nil, errors.New("credenciales inválidas")
 	}
 
-	// Generar tokens
 	accessTokenDuration, err := utils.ParseDuration(s.cfg.JWTExpiresIn)
 	if err != nil {
 		accessTokenDuration = 15 * time.Minute
@@ -99,34 +90,26 @@ func (s *AuthService) Login(ctx context.Context, req *models.LoginRequest) (*mod
 
 	refreshTokenDuration, err := utils.ParseDuration(s.cfg.JWTRefreshExpiresIn)
 	if err != nil {
-		refreshTokenDuration = 168 * time.Hour // 7 días
+		refreshTokenDuration = 168 * time.Hour
 	}
 
 	accessToken, err := utils.GenerateToken(
-		user.ID,
-		user.Email,
-		string(user.Role),
-		s.cfg.JWTSecret,
-		accessTokenDuration,
+		user.ID, user.Email, string(user.Role),
+		s.cfg.JWTSecret, accessTokenDuration,
 	)
 	if err != nil {
 		return nil, err
 	}
 
 	refreshToken, err := utils.GenerateToken(
-		user.ID,
-		user.Email,
-		string(user.Role),
-		s.cfg.JWTRefreshSecret,
-		refreshTokenDuration,
+		user.ID, user.Email, string(user.Role),
+		s.cfg.JWTRefreshSecret, refreshTokenDuration,
 	)
 	if err != nil {
 		return nil, err
 	}
 
-	// Limpiar contraseña antes de devolver
 	user.Password = ""
-
 	return &models.LoginResponse{
 		User:         user,
 		AccessToken:  accessToken,
@@ -136,13 +119,11 @@ func (s *AuthService) Login(ctx context.Context, req *models.LoginRequest) (*mod
 
 // RefreshToken renueva el token de acceso
 func (s *AuthService) RefreshToken(ctx context.Context, refreshToken string) (string, error) {
-	// Validar refresh token
 	claims, err := utils.ValidateToken(refreshToken, s.cfg.JWTRefreshSecret)
 	if err != nil {
 		return "", errors.New("refresh token inválido o expirado")
 	}
 
-	// Verificar que el usuario existe y está activo
 	user, err := s.userRepo.GetByID(ctx, claims.UserID)
 	if err != nil {
 		return "", errors.New("usuario no encontrado")
@@ -152,24 +133,15 @@ func (s *AuthService) RefreshToken(ctx context.Context, refreshToken string) (st
 		return "", errors.New("usuario inactivo")
 	}
 
-	// Generar nuevo access token
 	accessTokenDuration, err := utils.ParseDuration(s.cfg.JWTExpiresIn)
 	if err != nil {
 		accessTokenDuration = 15 * time.Minute
 	}
 
-	accessToken, err := utils.GenerateToken(
-		user.ID,
-		user.Email,
-		string(user.Role),
-		s.cfg.JWTSecret,
-		accessTokenDuration,
+	return utils.GenerateToken(
+		user.ID, user.Email, string(user.Role),
+		s.cfg.JWTSecret, accessTokenDuration,
 	)
-	if err != nil {
-		return "", err
-	}
-
-	return accessToken, nil
 }
 
 // GetProfile obtiene el perfil del usuario autenticado
@@ -184,9 +156,7 @@ func (s *AuthService) GetProfile(ctx context.Context, userID string) (*models.Us
 		return nil, err
 	}
 
-	// Limpiar contraseña
 	user.Password = ""
-
 	return user, nil
 }
 
@@ -202,38 +172,42 @@ func (s *AuthService) UpdateProfile(ctx context.Context, userID string, req *mod
 		return nil, err
 	}
 
-	// Actualizar campos si se proporcionan
+	// Campos no-nullable
 	if req.Name != "" {
 		user.Name = req.Name
 	}
 	if req.Phone != "" {
 		user.Phone = req.Phone
 	}
-	if req.City != nil {
-		user.City = req.City
-	}
-	if req.Municipality != nil {
-		user.Municipality = req.Municipality
-	}
-	if req.Neighborhood != nil {
-		user.Neighborhood = req.Neighborhood
-	}
-	if req.Gender != nil {
-		user.Gender = req.Gender
-	}
-	if req.BirthDate != nil {
-		user.BirthDate = req.BirthDate
+
+	// Campos nullable: asignar SIEMPRE sin guard
+	user.City = req.City
+	user.Municipality = req.Municipality
+	user.Neighborhood = req.Neighborhood
+	user.BirthDate = req.BirthDate
+	user.Gender = req.Gender
+
+	log.Printf("[DEBUG UpdateProfile] user antes de guardar: city=%v municipality=%v neighborhood=%v gender=%v birth_date=%v",
+		user.City, user.Municipality, user.Neighborhood, user.Gender, user.BirthDate)
+
+	if err = s.userRepo.Update(ctx, user); err != nil {
+		log.Printf("[DEBUG UpdateProfile] ERROR en Update: %v", err)
+		return nil, err
 	}
 
-	err = s.userRepo.Update(ctx, user)
+	log.Printf("[DEBUG UpdateProfile] Update exitoso, leyendo de Firestore...")
+
+	// Leer de Firestore para devolver estado real
+	saved, err := s.userRepo.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 
-	// Limpiar contraseña
-	user.Password = ""
+	log.Printf("[DEBUG UpdateProfile] saved desde Firestore: city=%v municipality=%v neighborhood=%v gender=%v birth_date=%v",
+		saved.City, saved.Municipality, saved.Neighborhood, saved.Gender, saved.BirthDate)
 
-	return user, nil
+	saved.Password = ""
+	return saved, nil
 }
 
 // GetAllUsers obtiene todos los usuarios (solo admin)
@@ -243,7 +217,6 @@ func (s *AuthService) GetAllUsers(ctx context.Context) ([]*models.User, error) {
 		return nil, err
 	}
 
-	// Limpiar contraseñas
 	for _, user := range users {
 		user.Password = ""
 	}
@@ -258,31 +231,26 @@ func (s *AuthService) UpdateUserByID(ctx context.Context, userID string, req *mo
 		return nil, errors.New("ID de usuario inválido")
 	}
 
-	// Obtener usuario existente
 	user, err := s.userRepo.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 
-	// Actualizar campos si se proporcionan
 	if req.Name != nil {
 		user.Name = *req.Name
 	}
 	if req.Phone != nil {
 		user.Phone = *req.Phone
 	}
-	if req.Email != nil {
-		// Verificar que el nuevo email no exista
-		if *req.Email != user.Email {
-			exists, err := s.userRepo.EmailExists(ctx, *req.Email)
-			if err != nil {
-				return nil, err
-			}
-			if exists {
-				return nil, errors.New("el email ya está registrado")
-			}
-			user.Email = *req.Email
+	if req.Email != nil && *req.Email != user.Email {
+		exists, err := s.userRepo.EmailExists(ctx, *req.Email)
+		if err != nil {
+			return nil, err
 		}
+		if exists {
+			return nil, errors.New("el email ya está registrado")
+		}
+		user.Email = *req.Email
 	}
 	if req.City != nil {
 		user.City = req.City
@@ -306,39 +274,32 @@ func (s *AuthService) UpdateUserByID(ctx context.Context, userID string, req *mo
 		user.IsActive = *req.IsActive
 	}
 	if req.Password != nil && *req.Password != "" {
-		// Hashear nueva contraseña
-		hashedPassword, err := utils.HashPassword(*req.Password)
+		hashed, err := utils.HashPassword(*req.Password)
 		if err != nil {
 			return nil, err
 		}
-		user.Password = hashedPassword
+		user.Password = hashed
 	}
 
-	// Actualizar usuario
-	err = s.userRepo.UpdateByID(ctx, id, user)
-	if err != nil {
+	if err = s.userRepo.UpdateByID(ctx, id, user); err != nil {
 		return nil, err
 	}
 
-	// Limpiar contraseña antes de devolver
 	user.Password = ""
-
 	return user, nil
 }
 
-// DeleteUser elimina un usuario por ID (soft delete, solo admin)
+// DeleteUser elimina un usuario por ID (solo admin)
 func (s *AuthService) DeleteUser(ctx context.Context, userID string) error {
 	id, err := uuid.Parse(userID)
 	if err != nil {
 		return errors.New("ID de usuario inválido")
 	}
 
-	// Verificar que el usuario existe
 	_, err = s.userRepo.GetByID(ctx, id)
 	if err != nil {
 		return err
 	}
 
-	// Eliminar usuario (soft delete)
 	return s.userRepo.Delete(ctx, id)
 }
