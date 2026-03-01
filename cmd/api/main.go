@@ -80,8 +80,8 @@ func main() {
 	productService := services.NewProductService(productRepo)
 	cartService := services.NewCartService(cartRepo, productRepo)
 	dashboardService := services.NewDashboardService(dashboardRepo, orderRepo, userRepo)
-	orderService := services.NewOrderService(orderRepo, productRepo, cartRepo, dashboardService)
-	discountService := services.NewDiscountService(discountRepo)
+	discountService := services.NewDiscountService(discountRepo)                                                  // FIX: movido antes de orderService
+	orderService := services.NewOrderService(orderRepo, productRepo, cartRepo, dashboardService, discountService) // FIX: discountService inyectado
 	reviewService := services.NewReviewService(reviewRepo, productRepo)
 	locationService := services.NewLocationService(locationRepo)
 	galleryService := services.NewGalleryService(galleryRepo)

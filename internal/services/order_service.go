@@ -16,18 +16,26 @@ type OrderService struct {
 	productRepo      *repository.ProductRepository
 	cartRepo         *repository.CartRepository
 	dashboardService *DashboardService
+	discountService  *DiscountService // FIX: inyectado
 }
 
-func NewOrderService(orderRepo *repository.OrderRepository, productRepo *repository.ProductRepository, cartRepo *repository.CartRepository, dashboardService *DashboardService) *OrderService {
+func NewOrderService(
+	orderRepo *repository.OrderRepository,
+	productRepo *repository.ProductRepository,
+	cartRepo *repository.CartRepository,
+	dashboardService *DashboardService,
+	discountService *DiscountService, // FIX: nuevo parámetro
+) *OrderService {
 	return &OrderService{
 		orderRepo:        orderRepo,
 		productRepo:      productRepo,
 		cartRepo:         cartRepo,
 		dashboardService: dashboardService,
+		discountService:  discountService,
 	}
 }
 
-// CreateOrder crea una nueva orden
+// CreateOrder crea una nueva orden y descuenta el stock al confirmarla.
 func (s *OrderService) CreateOrder(ctx context.Context, req *models.CreateOrderRequest, userID *uuid.UUID) (*models.OrderWithItems, error) {
 	if len(req.Items) == 0 {
 		return nil, errors.New("la orden debe tener al menos un producto")
@@ -43,28 +51,46 @@ func (s *OrderService) CreateOrder(ctx context.Context, req *models.CreateOrderR
 		}
 
 		if product.Stock < itemReq.Quantity {
-			return nil, fmt.Errorf("stock insuficiente para el producto %s", product.Name)
-		}
-
-		if !product.IsActive {
 			return nil, fmt.Errorf("el producto %s no está disponible", product.Name)
 		}
 
 		itemSubtotal := product.Price * float64(itemReq.Quantity)
 		subtotal += itemSubtotal
 
-		orderItem := models.OrderItem{
+		orderItems = append(orderItems, models.OrderItem{
 			ProductID:   product.ID,
 			ProductName: product.Name,
 			Quantity:    itemReq.Quantity,
 			Price:       product.Price,
 			Subtotal:    itemSubtotal,
-		}
-
-		orderItems = append(orderItems, orderItem)
+		})
 	}
 
+	// FIX: validar y aplicar código de descuento si viene en el request
 	discount := 0.0
+	var discountCodeID *uuid.UUID
+
+	if req.DiscountCode != "" && s.discountService != nil {
+		validation, err := s.discountService.ValidateDiscountCode(ctx, &models.ValidateDiscountRequest{
+			Code:          req.DiscountCode,
+			PurchaseTotal: subtotal,
+		})
+		if err != nil {
+			return nil, fmt.Errorf("error al validar código de descuento: %w", err)
+		}
+		if !validation.Valid {
+			return nil, fmt.Errorf("código de descuento inválido: %s", validation.Message)
+		}
+
+		discount = validation.DiscountAmount
+		discountCodeID = &validation.DiscountCode.ID
+
+		// Marcar el código como usado
+		if err := s.discountService.ApplyDiscountCode(ctx, validation.DiscountCode.ID); err != nil {
+			return nil, fmt.Errorf("error al aplicar código de descuento: %w", err)
+		}
+	}
+
 	total := subtotal - discount
 
 	order := &models.Order{
@@ -79,6 +105,7 @@ func (s *OrderService) CreateOrder(ctx context.Context, req *models.CreateOrderR
 		PaymentStatus:   models.PaymentPending,
 		Status:          models.OrderPending,
 		ShippingAddress: &req.ShippingAddress,
+		DiscountCodeID:  discountCodeID,
 		UTMSource:       req.UTMSource,
 		UTMMedium:       req.UTMMedium,
 		UTMCampaign:     req.UTMCampaign,
@@ -92,14 +119,12 @@ func (s *OrderService) CreateOrder(ctx context.Context, req *models.CreateOrderR
 	var savedItems []models.OrderItem
 	for _, item := range orderItems {
 		item.OrderID = order.ID
-		err := s.orderRepo.CreateOrderItem(ctx, &item)
-		if err != nil {
+		if err := s.orderRepo.CreateOrderItem(ctx, &item); err != nil {
 			return nil, err
 		}
 		savedItems = append(savedItems, item)
 
-		err = s.productRepo.UpdateStock(ctx, item.ProductID, -item.Quantity)
-		if err != nil {
+		if err := s.productRepo.UpdateStock(ctx, item.ProductID, -item.Quantity); err != nil {
 			return nil, fmt.Errorf("error al actualizar stock: %v", err)
 		}
 	}
@@ -207,7 +232,6 @@ func (s *OrderService) GetUserOrders(ctx context.Context, userID uuid.UUID, page
 }
 
 // GetAllOrders obtiene todas las órdenes (solo admin)
-// statusGroup: "" = todas, "active" = activas, "completed" = DELIVERED o CANCELLED
 func (s *OrderService) GetAllOrders(ctx context.Context, page int, pageSize int, statusGroup string) (*models.OrderListResponse, error) {
 	if page < 1 {
 		page = 1
@@ -216,8 +240,6 @@ func (s *OrderService) GetAllOrders(ctx context.Context, page int, pageSize int,
 		pageSize = 10
 	}
 
-	// Traemos todo sin paginar y filtramos en memoria
-	// (Firestore no soporta WHERE status NOT IN de forma simple)
 	allOrders, err := s.orderRepo.GetAllUnpaginated(ctx)
 	if err != nil {
 		return nil, err
@@ -247,7 +269,6 @@ func (s *OrderService) GetAllOrders(ctx context.Context, page int, pageSize int,
 
 	total := len(filtered)
 
-	// Paginar en memoria
 	offset := (page - 1) * pageSize
 	if offset > total {
 		offset = total
@@ -286,8 +307,7 @@ func (s *OrderService) UpdateOrderStatus(ctx context.Context, id uuid.UUID, req 
 		return nil, fmt.Errorf("transición de estado inválida de %s a %s", order.Status, req.Status)
 	}
 
-	err = s.orderRepo.UpdateStatus(ctx, id, req.Status)
-	if err != nil {
+	if err := s.orderRepo.UpdateStatus(ctx, id, req.Status); err != nil {
 		return nil, err
 	}
 
@@ -298,8 +318,7 @@ func (s *OrderService) UpdateOrderStatus(ctx context.Context, id uuid.UUID, req 
 		}
 
 		for _, item := range items {
-			err = s.productRepo.UpdateStock(ctx, item.ProductID, item.Quantity)
-			if err != nil {
+			if err := s.productRepo.UpdateStock(ctx, item.ProductID, item.Quantity); err != nil {
 				return nil, fmt.Errorf("error al devolver stock: %v", err)
 			}
 		}
@@ -321,16 +340,12 @@ func (s *OrderService) UpdatePaymentStatus(ctx context.Context, id uuid.UUID, re
 		return nil, err
 	}
 
-	err = s.orderRepo.UpdatePaymentStatus(ctx, id, req.PaymentStatus, nil)
-	if err != nil {
+	if err := s.orderRepo.UpdatePaymentStatus(ctx, id, req.PaymentStatus, nil); err != nil {
 		return nil, err
 	}
 
-	// Auto-avanzar a CONFIRMED solo si está en PENDING (flujo MercadoPago/Wompi)
-	// Para contra entrega ya habrá avanzado, no se toca el status
 	if req.PaymentStatus == models.PaymentApproved && order.Status == models.OrderPending {
-		err = s.orderRepo.UpdateStatus(ctx, id, models.OrderConfirmed)
-		if err != nil {
+		if err := s.orderRepo.UpdateStatus(ctx, id, models.OrderConfirmed); err != nil {
 			return nil, err
 		}
 	}
@@ -349,13 +364,13 @@ func (s *OrderService) isValidStatusTransition(from models.OrderStatus, to model
 		models.OrderCancelled:  {},
 	}
 
-	allowedTransitions, exists := validTransitions[from]
+	allowed, exists := validTransitions[from]
 	if !exists {
 		return false
 	}
 
-	for _, allowed := range allowedTransitions {
-		if allowed == to {
+	for _, a := range allowed {
+		if a == to {
 			return true
 		}
 	}

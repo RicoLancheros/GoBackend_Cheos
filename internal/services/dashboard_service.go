@@ -33,19 +33,16 @@ func NewDashboardService(
 // Helpers privados
 // ============================================================
 
-// ageRange calcula el rango de edad a partir de birth_date ("YYYY-MM-DD")
 func ageRange(birthDate string) string {
 	parsed, err := time.Parse("2006-01-02", birthDate)
 	if err != nil {
 		return "unknown"
 	}
-
 	now := time.Now()
 	age := now.Year() - parsed.Year()
 	if now.YearDay() < parsed.YearDay() {
 		age--
 	}
-
 	switch {
 	case age < 18:
 		return "unknown"
@@ -62,19 +59,17 @@ func ageRange(birthDate string) string {
 	}
 }
 
-// statusCategory mapea OrderStatus a una de 3 categorias de metrica
 func statusCategory(s models.OrderStatus) string {
 	switch s {
 	case models.OrderDelivered:
 		return "completed"
 	case models.OrderCancelled:
 		return "cancelled"
-	default: // PENDING, CONFIRMED, PROCESSING, SHIPPED
+	default:
 		return "pending"
 	}
 }
 
-// containsString verifica si un string esta en un slice
 func containsString(slice []string, s string) bool {
 	for _, item := range slice {
 		if item == s {
@@ -83,8 +78,6 @@ func containsString(slice []string, s string) bool {
 	}
 	return false
 }
-
-// --- Funciones para inicializar documentos vacios ---
 
 func newSalesMonthlyMetrics(year, month int) *models.SalesMonthlyMetrics {
 	return &models.SalesMonthlyMetrics{
@@ -132,9 +125,7 @@ func newTopProductsMetrics(year, month int) *models.TopProductsMetrics {
 	}
 }
 
-// sortAndSliceTopProducts ordena AllProducts y genera MostSold/LeastSold (top 10)
 func sortAndSliceTopProducts(metrics *models.TopProductsMetrics) {
-	// Convertir AllProducts map a slice de ProductStats
 	var products []models.ProductStats
 	for pid, p := range metrics.AllProducts {
 		products = append(products, models.ProductStats{
@@ -146,12 +137,9 @@ func sortAndSliceTopProducts(metrics *models.TopProductsMetrics) {
 		})
 	}
 
-	// Ordenar por TotalQuantity descendente para MostSold
 	sort.Slice(products, func(i, j int) bool {
 		return products[i].TotalQuantity > products[j].TotalQuantity
 	})
-
-	// MostSold: top 10
 	if len(products) > 10 {
 		metrics.MostSold = products[:10]
 	} else {
@@ -159,12 +147,9 @@ func sortAndSliceTopProducts(metrics *models.TopProductsMetrics) {
 		copy(metrics.MostSold, products)
 	}
 
-	// Ordenar por TotalQuantity ascendente para LeastSold
 	sort.Slice(products, func(i, j int) bool {
 		return products[i].TotalQuantity < products[j].TotalQuantity
 	})
-
-	// LeastSold: top 10
 	if len(products) > 10 {
 		metrics.LeastSold = products[:10]
 	} else {
@@ -173,28 +158,25 @@ func sortAndSliceTopProducts(metrics *models.TopProductsMetrics) {
 	}
 }
 
-// recalculateAverageTicket calcula el average ticket: revenue / (total_orders - cancelled_orders)
-func recalculateAverageTicket(totalRevenue float64, totalOrders, cancelledOrders int) float64 {
-	activeOrders := totalOrders - cancelledOrders
-	if activeOrders > 0 {
-		return totalRevenue / float64(activeOrders)
+func recalculateAverageTicket(totalRevenue float64, completedOrders int) float64 {
+	if completedOrders > 0 {
+		return totalRevenue / float64(completedOrders)
 	}
 	return 0
 }
 
 // ============================================================
-// Metodos Event-Driven
+// Métodos Event-Driven
 // ============================================================
 
-// OnOrderCreated se llama despues de crear una orden exitosamente.
-// Toda orden creada es venta aprobada (la pagina es un catalogo).
+// OnOrderCreated se llama al crear una orden.
+// SOLO incrementa PendingOrders y registra el comprador.
+// El revenue y productos se cuentan en OnOrderStatusChanged cuando llega a DELIVERED.
 func (s *DashboardService) OnOrderCreated(ctx context.Context, order *models.Order, items []models.OrderItem) error {
 	year := order.CreatedAt.Year()
 	month := int(order.CreatedAt.Month())
-	dayKey := order.CreatedAt.Format("2006-01-02")
-	monthKey := fmt.Sprintf("%02d", month)
 
-	// ---- (a) Ventas mensuales ----
+	// ---- (a) Ventas mensuales: solo pending ----
 	salesMonthly, err := s.dashboardRepo.GetSalesMonthly(ctx, year, month)
 	if err != nil {
 		return fmt.Errorf("error obteniendo sales_monthly: %w", err)
@@ -203,62 +185,14 @@ func (s *DashboardService) OnOrderCreated(ctx context.Context, order *models.Ord
 		salesMonthly = newSalesMonthlyMetrics(year, month)
 	}
 
-	salesMonthly.TotalRevenue += order.Total
-	salesMonthly.TotalOrders++
 	salesMonthly.PendingOrders++
-
-	if order.Discount > 0 {
-		salesMonthly.TotalDiscountGiven += order.Discount
-		salesMonthly.OrdersWithDiscount++
-	}
-
-	// Payment methods
-	pmKey := string(order.PaymentMethod)
-	pm := salesMonthly.PaymentMethods[pmKey]
-	pm.Count++
-	pm.Total += order.Total
-	salesMonthly.PaymentMethods[pmKey] = pm
-
-	// Daily breakdown
-	daily := salesMonthly.DailyBreakdown[dayKey]
-	daily.Revenue += order.Total
-	daily.Orders++
-	salesMonthly.DailyBreakdown[dayKey] = daily
-
-	// Recalcular average ticket
-	salesMonthly.AverageTicket = recalculateAverageTicket(salesMonthly.TotalRevenue, salesMonthly.TotalOrders, salesMonthly.CancelledOrders)
 	salesMonthly.UpdatedAt = time.Now()
 
 	if err := s.dashboardRepo.SaveSalesMonthly(ctx, year, month, salesMonthly); err != nil {
 		return fmt.Errorf("error guardando sales_monthly: %w", err)
 	}
 
-	// ---- (b) Ventas anuales ----
-	salesYearly, err := s.dashboardRepo.GetSalesYearly(ctx, year)
-	if err != nil {
-		return fmt.Errorf("error obteniendo sales_yearly: %w", err)
-	}
-	if salesYearly == nil {
-		salesYearly = newSalesYearlyMetrics(year)
-	}
-
-	salesYearly.TotalRevenue += order.Total
-	salesYearly.TotalOrders++
-
-	// Monthly breakdown
-	mb := salesYearly.MonthlyBreakdown[monthKey]
-	mb.Revenue += order.Total
-	mb.Orders++
-	salesYearly.MonthlyBreakdown[monthKey] = mb
-
-	salesYearly.AverageTicket = recalculateAverageTicket(salesYearly.TotalRevenue, salesYearly.TotalOrders, salesYearly.CancelledOrders)
-	salesYearly.UpdatedAt = time.Now()
-
-	if err := s.dashboardRepo.SaveSalesYearly(ctx, year, salesYearly); err != nil {
-		return fmt.Errorf("error guardando sales_yearly: %w", err)
-	}
-
-	// ---- (c) Compradores mensuales ----
+	// ---- (b) Compradores mensuales ----
 	buyersMonthly, err := s.dashboardRepo.GetBuyersMonthly(ctx, year, month)
 	if err != nil {
 		return fmt.Errorf("error obteniendo buyers_monthly: %w", err)
@@ -267,7 +201,6 @@ func (s *DashboardService) OnOrderCreated(ctx context.Context, order *models.Ord
 		buyersMonthly = newBuyersMonthlyMetrics(year, month)
 	}
 
-	// Determinar buyer ID
 	var buyerID string
 	if order.UserID != nil {
 		buyerID = order.UserID.String()
@@ -275,58 +208,45 @@ func (s *DashboardService) OnOrderCreated(ctx context.Context, order *models.Ord
 		buyerID = order.CustomerEmail
 	}
 
-	// Solo procesar si es comprador nuevo del mes
 	if !containsString(buyersMonthly.BuyerIDs, buyerID) {
 		buyersMonthly.BuyerIDs = append(buyersMonthly.BuyerIDs, buyerID)
 		buyersMonthly.TotalBuyers++
 
 		if order.UserID != nil {
-			// Usuario registrado
 			buyersMonthly.RegisteredBuyers++
-
 			user, userErr := s.userRepo.GetByID(ctx, *order.UserID)
 			if userErr != nil {
-				log.Printf("Warning: no se pudo obtener usuario %s para metricas: %v", order.UserID.String(), userErr)
-				// Usar valores desconocidos
+				log.Printf("Warning: no se pudo obtener usuario %s: %v", order.UserID.String(), userErr)
 				buyersMonthly.GenderBreakdown["UNKNOWN"]++
 				buyersMonthly.AgeBreakdown["unknown"]++
 				buyersMonthly.CityBreakdown["unknown"]++
 			} else {
-				// Gender
 				if user.Gender != nil {
 					buyersMonthly.GenderBreakdown[string(*user.Gender)]++
 				} else {
 					buyersMonthly.GenderBreakdown["UNKNOWN"]++
 				}
-
-				// Age
 				if user.BirthDate != nil {
 					buyersMonthly.AgeBreakdown[ageRange(*user.BirthDate)]++
 				} else {
 					buyersMonthly.AgeBreakdown["unknown"]++
 				}
-
-				// City
 				if user.City != nil {
 					buyersMonthly.CityBreakdown[*user.City]++
 				} else {
 					buyersMonthly.CityBreakdown["unknown"]++
 				}
-
-				// Verificar si se registro este mismo mes
 				if user.CreatedAt.Year() == year && int(user.CreatedAt.Month()) == month {
 					buyersMonthly.NewRegisteredThisMonth++
 				}
 			}
 		} else {
-			// Invitado
 			buyersMonthly.GuestBuyers++
 			buyersMonthly.GenderBreakdown["UNKNOWN"]++
 			buyersMonthly.AgeBreakdown["unknown"]++
 			buyersMonthly.CityBreakdown["unknown"]++
 		}
 
-		// Recalcular returning buyers
 		buyersMonthly.ReturningBuyers = buyersMonthly.TotalBuyers - buyersMonthly.NewRegisteredThisMonth - buyersMonthly.GuestBuyers
 		if buyersMonthly.ReturningBuyers < 0 {
 			buyersMonthly.ReturningBuyers = 0
@@ -338,7 +258,7 @@ func (s *DashboardService) OnOrderCreated(ctx context.Context, order *models.Ord
 		return fmt.Errorf("error guardando buyers_monthly: %w", err)
 	}
 
-	// ---- (d) Compradores anuales ----
+	// ---- (c) Compradores anuales ----
 	buyersYearly, err := s.dashboardRepo.GetBuyersYearly(ctx, year)
 	if err != nil {
 		return fmt.Errorf("error obteniendo buyers_yearly: %w", err)
@@ -353,11 +273,8 @@ func (s *DashboardService) OnOrderCreated(ctx context.Context, order *models.Ord
 
 		if order.UserID != nil {
 			buyersYearly.RegisteredBuyers++
-
-			// Reusar el user ya obtenido si es posible, sino obtener de nuevo
 			user, userErr := s.userRepo.GetByID(ctx, *order.UserID)
 			if userErr != nil {
-				log.Printf("Warning: no se pudo obtener usuario %s para metricas anuales: %v", order.UserID.String(), userErr)
 				buyersYearly.GenderBreakdown["UNKNOWN"]++
 				buyersYearly.AgeBreakdown["unknown"]++
 			} else {
@@ -366,7 +283,6 @@ func (s *DashboardService) OnOrderCreated(ctx context.Context, order *models.Ord
 				} else {
 					buyersYearly.GenderBreakdown["UNKNOWN"]++
 				}
-
 				if user.BirthDate != nil {
 					buyersYearly.AgeBreakdown[ageRange(*user.BirthDate)]++
 				} else {
@@ -385,74 +301,26 @@ func (s *DashboardService) OnOrderCreated(ctx context.Context, order *models.Ord
 		return fmt.Errorf("error guardando buyers_yearly: %w", err)
 	}
 
-	// ---- (e) Top productos mensuales ----
-	topMonthly, err := s.dashboardRepo.GetTopProductsMonthly(ctx, year, month)
-	if err != nil {
-		return fmt.Errorf("error obteniendo top_products_monthly: %w", err)
-	}
-	if topMonthly == nil {
-		topMonthly = newTopProductsMetrics(year, month)
-	}
-
-	for _, item := range items {
-		pid := item.ProductID.String()
-		p := topMonthly.AllProducts[pid]
-		p.Name = item.ProductName
-		p.Quantity += item.Quantity
-		p.Revenue += item.Subtotal
-		p.Orders++
-		topMonthly.AllProducts[pid] = p
-	}
-
-	sortAndSliceTopProducts(topMonthly)
-	topMonthly.UpdatedAt = time.Now()
-
-	if err := s.dashboardRepo.SaveTopProductsMonthly(ctx, year, month, topMonthly); err != nil {
-		return fmt.Errorf("error guardando top_products_monthly: %w", err)
-	}
-
-	// ---- (f) Top productos anuales ----
-	topYearly, err := s.dashboardRepo.GetTopProductsYearly(ctx, year)
-	if err != nil {
-		return fmt.Errorf("error obteniendo top_products_yearly: %w", err)
-	}
-	if topYearly == nil {
-		topYearly = newTopProductsMetrics(year, 0)
-	}
-
-	for _, item := range items {
-		pid := item.ProductID.String()
-		p := topYearly.AllProducts[pid]
-		p.Name = item.ProductName
-		p.Quantity += item.Quantity
-		p.Revenue += item.Subtotal
-		p.Orders++
-		topYearly.AllProducts[pid] = p
-	}
-
-	sortAndSliceTopProducts(topYearly)
-	topYearly.UpdatedAt = time.Now()
-
-	if err := s.dashboardRepo.SaveTopProductsYearly(ctx, year, topYearly); err != nil {
-		return fmt.Errorf("error guardando top_products_yearly: %w", err)
-	}
-
 	return nil
 }
 
 // OnOrderStatusChanged se llama cuando un admin cambia el estado de una orden.
-// Solo actualiza documentos de ventas (no afecta compradores ni productos).
+//
+// Lógica de revenue:
+//   - DELIVERED  → sumar revenue, productos y completedOrders
+//   - CANCELLED  → restar pending. Si venía de DELIVERED, restar revenue también
+//   - Otros cambios dentro de "pending" → solo mover contadores de estado
 func (s *DashboardService) OnOrderStatusChanged(ctx context.Context, order *models.Order, oldStatus, newStatus models.OrderStatus) error {
 	year := order.CreatedAt.Year()
 	month := int(order.CreatedAt.Month())
 	dayKey := order.CreatedAt.Format("2006-01-02")
 	monthKey := fmt.Sprintf("%02d", month)
 
-	oldCategory := statusCategory(oldStatus)
-	newCategory := statusCategory(newStatus)
+	oldCat := statusCategory(oldStatus)
+	newCat := statusCategory(newStatus)
 
-	// Si no cambia de categoria, solo actualizar timestamp
-	if oldCategory == newCategory {
+	// Sin cambio de categoría — nada que hacer
+	if oldCat == newCat {
 		return nil
 	}
 
@@ -462,22 +330,25 @@ func (s *DashboardService) OnOrderStatusChanged(ctx context.Context, order *mode
 		return fmt.Errorf("error obteniendo sales_monthly: %w", err)
 	}
 	if salesMonthly == nil {
-		// No deberia pasar, pero por seguridad
-		return nil
+		salesMonthly = newSalesMonthlyMetrics(year, month)
 	}
 
-	// Decrementar categoria anterior
-	switch oldCategory {
+	// FIX: Guard para evitar contadores negativos al decrementar
+	switch oldCat {
 	case "pending":
-		salesMonthly.PendingOrders--
+		if salesMonthly.PendingOrders > 0 {
+			salesMonthly.PendingOrders--
+		}
 	case "completed":
-		salesMonthly.CompletedOrders--
+		if salesMonthly.CompletedOrders > 0 {
+			salesMonthly.CompletedOrders--
+		}
 	case "cancelled":
-		salesMonthly.CancelledOrders--
+		if salesMonthly.CancelledOrders > 0 {
+			salesMonthly.CancelledOrders--
+		}
 	}
-
-	// Incrementar categoria nueva
-	switch newCategory {
+	switch newCat {
 	case "pending":
 		salesMonthly.PendingOrders++
 	case "completed":
@@ -486,34 +357,8 @@ func (s *DashboardService) OnOrderStatusChanged(ctx context.Context, order *mode
 		salesMonthly.CancelledOrders++
 	}
 
-	// Si se cancela: restar revenue y contadores
-	if newCategory == "cancelled" {
-		salesMonthly.TotalRevenue -= order.Total
-		salesMonthly.TotalOrders--
-
-		if order.Discount > 0 {
-			salesMonthly.TotalDiscountGiven -= order.Discount
-			salesMonthly.OrdersWithDiscount--
-		}
-
-		// Actualizar payment methods
-		pmKey := string(order.PaymentMethod)
-		if pm, ok := salesMonthly.PaymentMethods[pmKey]; ok {
-			pm.Count--
-			pm.Total -= order.Total
-			salesMonthly.PaymentMethods[pmKey] = pm
-		}
-
-		// Actualizar daily breakdown
-		if daily, ok := salesMonthly.DailyBreakdown[dayKey]; ok {
-			daily.Revenue -= order.Total
-			daily.Orders--
-			salesMonthly.DailyBreakdown[dayKey] = daily
-		}
-	}
-
-	// Si se revierte una cancelacion (defensivo, no deberia pasar por validacion de transiciones)
-	if oldCategory == "cancelled" && newCategory != "cancelled" {
+	// DELIVERED → sumar revenue y pedidos completados
+	if newStatus == models.OrderDelivered {
 		salesMonthly.TotalRevenue += order.Total
 		salesMonthly.TotalOrders++
 
@@ -534,7 +379,37 @@ func (s *DashboardService) OnOrderStatusChanged(ctx context.Context, order *mode
 		salesMonthly.DailyBreakdown[dayKey] = daily
 	}
 
-	salesMonthly.AverageTicket = recalculateAverageTicket(salesMonthly.TotalRevenue, salesMonthly.TotalOrders, salesMonthly.CancelledOrders)
+	// CANCELLED desde DELIVERED → restar revenue (devolución)
+	if newStatus == models.OrderCancelled && oldStatus == models.OrderDelivered {
+		salesMonthly.TotalRevenue -= order.Total
+		if salesMonthly.TotalOrders > 0 {
+			salesMonthly.TotalOrders--
+		}
+
+		if order.Discount > 0 {
+			salesMonthly.TotalDiscountGiven -= order.Discount
+			if salesMonthly.OrdersWithDiscount > 0 {
+				salesMonthly.OrdersWithDiscount--
+			}
+		}
+
+		pmKey := string(order.PaymentMethod)
+		if pm, ok := salesMonthly.PaymentMethods[pmKey]; ok {
+			pm.Count--
+			pm.Total -= order.Total
+			salesMonthly.PaymentMethods[pmKey] = pm
+		}
+
+		if daily, ok := salesMonthly.DailyBreakdown[dayKey]; ok {
+			daily.Revenue -= order.Total
+			if daily.Orders > 0 {
+				daily.Orders--
+			}
+			salesMonthly.DailyBreakdown[dayKey] = daily
+		}
+	}
+
+	salesMonthly.AverageTicket = recalculateAverageTicket(salesMonthly.TotalRevenue, salesMonthly.CompletedOrders)
 	salesMonthly.UpdatedAt = time.Now()
 
 	if err := s.dashboardRepo.SaveSalesMonthly(ctx, year, month, salesMonthly); err != nil {
@@ -547,38 +422,27 @@ func (s *DashboardService) OnOrderStatusChanged(ctx context.Context, order *mode
 		return fmt.Errorf("error obteniendo sales_yearly: %w", err)
 	}
 	if salesYearly == nil {
-		return nil
+		salesYearly = newSalesYearlyMetrics(year)
 	}
 
-	// Mover contadores de estado (el struct anual tambien tiene CompletedOrders y CancelledOrders)
-	switch oldCategory {
+	switch oldCat {
 	case "completed":
-		salesYearly.CompletedOrders--
+		if salesYearly.CompletedOrders > 0 {
+			salesYearly.CompletedOrders--
+		}
 	case "cancelled":
-		salesYearly.CancelledOrders--
+		if salesYearly.CancelledOrders > 0 {
+			salesYearly.CancelledOrders--
+		}
 	}
-
-	switch newCategory {
+	switch newCat {
 	case "completed":
 		salesYearly.CompletedOrders++
 	case "cancelled":
 		salesYearly.CancelledOrders++
 	}
 
-	// Si se cancela: restar revenue
-	if newCategory == "cancelled" {
-		salesYearly.TotalRevenue -= order.Total
-		salesYearly.TotalOrders--
-
-		if mb, ok := salesYearly.MonthlyBreakdown[monthKey]; ok {
-			mb.Revenue -= order.Total
-			mb.Orders--
-			salesYearly.MonthlyBreakdown[monthKey] = mb
-		}
-	}
-
-	// Si se revierte cancelacion (defensivo)
-	if oldCategory == "cancelled" && newCategory != "cancelled" {
+	if newStatus == models.OrderDelivered {
 		salesYearly.TotalRevenue += order.Total
 		salesYearly.TotalOrders++
 
@@ -588,21 +452,89 @@ func (s *DashboardService) OnOrderStatusChanged(ctx context.Context, order *mode
 		salesYearly.MonthlyBreakdown[monthKey] = mb
 	}
 
-	salesYearly.AverageTicket = recalculateAverageTicket(salesYearly.TotalRevenue, salesYearly.TotalOrders, salesYearly.CancelledOrders)
+	if newStatus == models.OrderCancelled && oldStatus == models.OrderDelivered {
+		salesYearly.TotalRevenue -= order.Total
+		if salesYearly.TotalOrders > 0 {
+			salesYearly.TotalOrders--
+		}
+
+		if mb, ok := salesYearly.MonthlyBreakdown[monthKey]; ok {
+			mb.Revenue -= order.Total
+			if mb.Orders > 0 {
+				mb.Orders--
+			}
+			salesYearly.MonthlyBreakdown[monthKey] = mb
+		}
+	}
+
+	salesYearly.AverageTicket = recalculateAverageTicket(salesYearly.TotalRevenue, salesYearly.CompletedOrders)
 	salesYearly.UpdatedAt = time.Now()
 
 	if err := s.dashboardRepo.SaveSalesYearly(ctx, year, salesYearly); err != nil {
 		return fmt.Errorf("error guardando sales_yearly: %w", err)
 	}
 
+	// ---- (c) Top productos — solo al DELIVERED ----
+	if newStatus == models.OrderDelivered {
+		items, err := s.orderRepo.GetItemsByOrderID(ctx, order.ID)
+		if err != nil {
+			log.Printf("Warning: no se pudieron obtener items para top_products orden %s: %v", order.ID.String(), err)
+		} else {
+			// Mensual
+			topMonthly, err := s.dashboardRepo.GetTopProductsMonthly(ctx, year, month)
+			if err != nil {
+				return fmt.Errorf("error obteniendo top_products_monthly: %w", err)
+			}
+			if topMonthly == nil {
+				topMonthly = newTopProductsMetrics(year, month)
+			}
+			for _, item := range items {
+				pid := item.ProductID.String()
+				p := topMonthly.AllProducts[pid]
+				p.Name = item.ProductName
+				p.Quantity += item.Quantity
+				p.Revenue += item.Subtotal
+				p.Orders++
+				topMonthly.AllProducts[pid] = p
+			}
+			sortAndSliceTopProducts(topMonthly)
+			topMonthly.UpdatedAt = time.Now()
+			if err := s.dashboardRepo.SaveTopProductsMonthly(ctx, year, month, topMonthly); err != nil {
+				return fmt.Errorf("error guardando top_products_monthly: %w", err)
+			}
+
+			// Anual
+			topYearly, err := s.dashboardRepo.GetTopProductsYearly(ctx, year)
+			if err != nil {
+				return fmt.Errorf("error obteniendo top_products_yearly: %w", err)
+			}
+			if topYearly == nil {
+				topYearly = newTopProductsMetrics(year, 0)
+			}
+			for _, item := range items {
+				pid := item.ProductID.String()
+				p := topYearly.AllProducts[pid]
+				p.Name = item.ProductName
+				p.Quantity += item.Quantity
+				p.Revenue += item.Subtotal
+				p.Orders++
+				topYearly.AllProducts[pid] = p
+			}
+			sortAndSliceTopProducts(topYearly)
+			topYearly.UpdatedAt = time.Now()
+			if err := s.dashboardRepo.SaveTopProductsYearly(ctx, year, topYearly); err != nil {
+				return fmt.Errorf("error guardando top_products_yearly: %w", err)
+			}
+		}
+	}
+
 	return nil
 }
 
 // ============================================================
-// Metodos de Lectura (para endpoints GET)
+// Métodos de Lectura
 // ============================================================
 
-// GetSalesMonthly obtiene las metricas de ventas mensuales. Si no existe retorna documento vacio.
 func (s *DashboardService) GetSalesMonthly(ctx context.Context, year, month int) (*models.SalesMonthlyMetrics, error) {
 	metrics, err := s.dashboardRepo.GetSalesMonthly(ctx, year, month)
 	if err != nil {
@@ -614,7 +546,6 @@ func (s *DashboardService) GetSalesMonthly(ctx context.Context, year, month int)
 	return metrics, nil
 }
 
-// GetSalesYearly obtiene las metricas de ventas anuales. Si no existe retorna documento vacio.
 func (s *DashboardService) GetSalesYearly(ctx context.Context, year int) (*models.SalesYearlyMetrics, error) {
 	metrics, err := s.dashboardRepo.GetSalesYearly(ctx, year)
 	if err != nil {
@@ -626,7 +557,6 @@ func (s *DashboardService) GetSalesYearly(ctx context.Context, year int) (*model
 	return metrics, nil
 }
 
-// GetBuyersMonthly obtiene las estadisticas de compradores mensuales. Si no existe retorna documento vacio.
 func (s *DashboardService) GetBuyersMonthly(ctx context.Context, year, month int) (*models.BuyersMonthlyMetrics, error) {
 	metrics, err := s.dashboardRepo.GetBuyersMonthly(ctx, year, month)
 	if err != nil {
@@ -638,7 +568,6 @@ func (s *DashboardService) GetBuyersMonthly(ctx context.Context, year, month int
 	return metrics, nil
 }
 
-// GetBuyersYearly obtiene las estadisticas de compradores anuales. Si no existe retorna documento vacio.
 func (s *DashboardService) GetBuyersYearly(ctx context.Context, year int) (*models.BuyersYearlyMetrics, error) {
 	metrics, err := s.dashboardRepo.GetBuyersYearly(ctx, year)
 	if err != nil {
@@ -650,7 +579,6 @@ func (s *DashboardService) GetBuyersYearly(ctx context.Context, year int) (*mode
 	return metrics, nil
 }
 
-// GetTopProductsMonthly obtiene las metricas de top productos mensuales. Si no existe retorna documento vacio.
 func (s *DashboardService) GetTopProductsMonthly(ctx context.Context, year, month int) (*models.TopProductsMetrics, error) {
 	metrics, err := s.dashboardRepo.GetTopProductsMonthly(ctx, year, month)
 	if err != nil {
@@ -662,7 +590,6 @@ func (s *DashboardService) GetTopProductsMonthly(ctx context.Context, year, mont
 	return metrics, nil
 }
 
-// GetTopProductsYearly obtiene las metricas de top productos anuales. Si no existe retorna documento vacio.
 func (s *DashboardService) GetTopProductsYearly(ctx context.Context, year int) (*models.TopProductsMetrics, error) {
 	metrics, err := s.dashboardRepo.GetTopProductsYearly(ctx, year)
 	if err != nil {
@@ -674,7 +601,6 @@ func (s *DashboardService) GetTopProductsYearly(ctx context.Context, year int) (
 	return metrics, nil
 }
 
-// GetSummary obtiene el resumen consolidado del dashboard para el mes y ano actual.
 func (s *DashboardService) GetSummary(ctx context.Context) (*models.DashboardSummary, error) {
 	now := time.Now()
 	year := now.Year()
@@ -700,7 +626,6 @@ func (s *DashboardService) GetSummary(ctx context.Context) (*models.DashboardSum
 		return nil, fmt.Errorf("error obteniendo top_products_monthly para summary: %w", err)
 	}
 
-	// Convertir MostSold a DashboardSummaryTopProduct
 	var topProducts []models.DashboardSummaryTopProduct
 	for _, p := range topProductsMonthly.MostSold {
 		topProducts = append(topProducts, models.DashboardSummaryTopProduct{
@@ -730,31 +655,24 @@ func (s *DashboardService) GetSummary(ctx context.Context) (*models.DashboardSum
 }
 
 // ============================================================
-// Recalculo Manual
+// Recálculo Manual
 // ============================================================
 
-// RecalculateMonth reconstruye desde cero los documentos de metricas del mes y ano completo.
 func (s *DashboardService) RecalculateMonth(ctx context.Context, year, month int) error {
-	// Calcular rangos de fecha
 	startOfMonth := time.Date(year, time.Month(month), 1, 0, 0, 0, 0, time.UTC)
 	endOfMonth := startOfMonth.AddDate(0, 1, 0)
-
 	startOfYear := time.Date(year, 1, 1, 0, 0, 0, 0, time.UTC)
 	endOfYear := time.Date(year+1, 1, 1, 0, 0, 0, 0, time.UTC)
 
-	// Obtener todas las ordenes del mes
 	monthlyOrders, err := s.orderRepo.GetOrdersByDateRange(ctx, startOfMonth, endOfMonth)
 	if err != nil {
 		return fmt.Errorf("error obteniendo ordenes del mes: %w", err)
 	}
-
-	// Obtener todas las ordenes del ano
 	yearlyOrders, err := s.orderRepo.GetOrdersByDateRange(ctx, startOfYear, endOfYear)
 	if err != nil {
 		return fmt.Errorf("error obteniendo ordenes del ano: %w", err)
 	}
 
-	// Inicializar documentos vacios
 	salesMonthly := newSalesMonthlyMetrics(year, month)
 	buyersMonthly := newBuyersMonthlyMetrics(year, month)
 	topProductsMonthly := newTopProductsMetrics(year, month)
@@ -763,43 +681,35 @@ func (s *DashboardService) RecalculateMonth(ctx context.Context, year, month int
 	buyersYearly := newBuyersYearlyMetrics(year)
 	topProductsYearly := newTopProductsMetrics(year, 0)
 
-	// --- Procesar ordenes mensuales ---
 	for _, order := range monthlyOrders {
 		items, itemsErr := s.orderRepo.GetItemsByOrderID(ctx, order.ID)
 		if itemsErr != nil {
 			log.Printf("Warning: no se pudieron obtener items de orden %s: %v", order.ID.String(), itemsErr)
 			continue
 		}
-
 		s.recalcProcessOrder(ctx, order, items, salesMonthly, buyersMonthly, topProductsMonthly)
 	}
 
-	// --- Procesar ordenes anuales ---
 	for _, order := range yearlyOrders {
 		items, itemsErr := s.orderRepo.GetItemsByOrderID(ctx, order.ID)
 		if itemsErr != nil {
 			log.Printf("Warning: no se pudieron obtener items de orden %s: %v", order.ID.String(), itemsErr)
 			continue
 		}
-
 		s.recalcProcessOrderYearly(ctx, order, items, salesYearly, buyersYearly, topProductsYearly)
 	}
 
-	// Recalcular average tickets
-	salesMonthly.AverageTicket = recalculateAverageTicket(salesMonthly.TotalRevenue, salesMonthly.TotalOrders, salesMonthly.CancelledOrders)
-	salesYearly.AverageTicket = recalculateAverageTicket(salesYearly.TotalRevenue, salesYearly.TotalOrders, salesYearly.CancelledOrders)
+	salesMonthly.AverageTicket = recalculateAverageTicket(salesMonthly.TotalRevenue, salesMonthly.CompletedOrders)
+	salesYearly.AverageTicket = recalculateAverageTicket(salesYearly.TotalRevenue, salesYearly.CompletedOrders)
 
-	// Recalcular returning buyers mensual
 	buyersMonthly.ReturningBuyers = buyersMonthly.TotalBuyers - buyersMonthly.NewRegisteredThisMonth - buyersMonthly.GuestBuyers
 	if buyersMonthly.ReturningBuyers < 0 {
 		buyersMonthly.ReturningBuyers = 0
 	}
 
-	// Recalcular top products
 	sortAndSliceTopProducts(topProductsMonthly)
 	sortAndSliceTopProducts(topProductsYearly)
 
-	// Actualizar timestamps
 	now := time.Now()
 	salesMonthly.UpdatedAt = now
 	salesYearly.UpdatedAt = now
@@ -808,7 +718,6 @@ func (s *DashboardService) RecalculateMonth(ctx context.Context, year, month int
 	topProductsMonthly.UpdatedAt = now
 	topProductsYearly.UpdatedAt = now
 
-	// Guardar todos los documentos
 	if err := s.dashboardRepo.SaveSalesMonthly(ctx, year, month, salesMonthly); err != nil {
 		return fmt.Errorf("error guardando sales_monthly recalculado: %w", err)
 	}
@@ -831,7 +740,6 @@ func (s *DashboardService) RecalculateMonth(ctx context.Context, year, month int
 	return nil
 }
 
-// recalcProcessOrder procesa una orden individual para el recalculo mensual.
 func (s *DashboardService) recalcProcessOrder(
 	ctx context.Context,
 	order *models.Order,
@@ -841,10 +749,18 @@ func (s *DashboardService) recalcProcessOrder(
 	topProducts *models.TopProductsMetrics,
 ) {
 	dayKey := order.CreatedAt.Format("2006-01-02")
-	isCancelled := order.Status == models.OrderCancelled
+	isDelivered := order.Status == models.OrderDelivered
 
-	// --- Sales ---
-	if !isCancelled {
+	switch statusCategory(order.Status) {
+	case "pending":
+		sales.PendingOrders++
+	case "completed":
+		sales.CompletedOrders++
+	case "cancelled":
+		sales.CancelledOrders++
+	}
+
+	if isDelivered {
 		sales.TotalRevenue += order.Total
 		sales.TotalOrders++
 
@@ -863,19 +779,18 @@ func (s *DashboardService) recalcProcessOrder(
 		daily.Revenue += order.Total
 		daily.Orders++
 		sales.DailyBreakdown[dayKey] = daily
+
+		for _, item := range items {
+			pid := item.ProductID.String()
+			p := topProducts.AllProducts[pid]
+			p.Name = item.ProductName
+			p.Quantity += item.Quantity
+			p.Revenue += item.Subtotal
+			p.Orders++
+			topProducts.AllProducts[pid] = p
+		}
 	}
 
-	// Contadores de estado
-	switch statusCategory(order.Status) {
-	case "pending":
-		sales.PendingOrders++
-	case "completed":
-		sales.CompletedOrders++
-	case "cancelled":
-		sales.CancelledOrders++
-	}
-
-	// --- Buyers ---
 	var buyerID string
 	if order.UserID != nil {
 		buyerID = order.UserID.String()
@@ -889,7 +804,6 @@ func (s *DashboardService) recalcProcessOrder(
 
 		if order.UserID != nil {
 			buyers.RegisteredBuyers++
-
 			user, userErr := s.userRepo.GetByID(ctx, *order.UserID)
 			if userErr != nil {
 				buyers.GenderBreakdown["UNKNOWN"]++
@@ -922,9 +836,35 @@ func (s *DashboardService) recalcProcessOrder(
 			buyers.CityBreakdown["unknown"]++
 		}
 	}
+}
 
-	// --- Top Products (solo ordenes no canceladas) ---
-	if !isCancelled {
+func (s *DashboardService) recalcProcessOrderYearly(
+	ctx context.Context,
+	order *models.Order,
+	items []*models.OrderItem,
+	sales *models.SalesYearlyMetrics,
+	buyers *models.BuyersYearlyMetrics,
+	topProducts *models.TopProductsMetrics,
+) {
+	monthKey := fmt.Sprintf("%02d", int(order.CreatedAt.Month()))
+	isDelivered := order.Status == models.OrderDelivered
+
+	switch statusCategory(order.Status) {
+	case "completed":
+		sales.CompletedOrders++
+	case "cancelled":
+		sales.CancelledOrders++
+	}
+
+	if isDelivered {
+		sales.TotalRevenue += order.Total
+		sales.TotalOrders++
+
+		mb := sales.MonthlyBreakdown[monthKey]
+		mb.Revenue += order.Total
+		mb.Orders++
+		sales.MonthlyBreakdown[monthKey] = mb
+
 		for _, item := range items {
 			pid := item.ProductID.String()
 			p := topProducts.AllProducts[pid]
@@ -935,39 +875,7 @@ func (s *DashboardService) recalcProcessOrder(
 			topProducts.AllProducts[pid] = p
 		}
 	}
-}
 
-// recalcProcessOrderYearly procesa una orden individual para el recalculo anual.
-func (s *DashboardService) recalcProcessOrderYearly(
-	ctx context.Context,
-	order *models.Order,
-	items []*models.OrderItem,
-	sales *models.SalesYearlyMetrics,
-	buyers *models.BuyersYearlyMetrics,
-	topProducts *models.TopProductsMetrics,
-) {
-	monthKey := fmt.Sprintf("%02d", int(order.CreatedAt.Month()))
-	isCancelled := order.Status == models.OrderCancelled
-
-	// --- Sales ---
-	if !isCancelled {
-		sales.TotalRevenue += order.Total
-		sales.TotalOrders++
-
-		mb := sales.MonthlyBreakdown[monthKey]
-		mb.Revenue += order.Total
-		mb.Orders++
-		sales.MonthlyBreakdown[monthKey] = mb
-	}
-
-	switch statusCategory(order.Status) {
-	case "completed":
-		sales.CompletedOrders++
-	case "cancelled":
-		sales.CancelledOrders++
-	}
-
-	// --- Buyers ---
 	var buyerID string
 	if order.UserID != nil {
 		buyerID = order.UserID.String()
@@ -981,7 +889,6 @@ func (s *DashboardService) recalcProcessOrderYearly(
 
 		if order.UserID != nil {
 			buyers.RegisteredBuyers++
-
 			user, userErr := s.userRepo.GetByID(ctx, *order.UserID)
 			if userErr != nil {
 				buyers.GenderBreakdown["UNKNOWN"]++
@@ -1002,19 +909,6 @@ func (s *DashboardService) recalcProcessOrderYearly(
 			buyers.GuestBuyers++
 			buyers.GenderBreakdown["UNKNOWN"]++
 			buyers.AgeBreakdown["unknown"]++
-		}
-	}
-
-	// --- Top Products (solo ordenes no canceladas) ---
-	if !isCancelled {
-		for _, item := range items {
-			pid := item.ProductID.String()
-			p := topProducts.AllProducts[pid]
-			p.Name = item.ProductName
-			p.Quantity += item.Quantity
-			p.Revenue += item.Subtotal
-			p.Orders++
-			topProducts.AllProducts[pid] = p
 		}
 	}
 }

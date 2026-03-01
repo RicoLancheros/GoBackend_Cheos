@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/cheoscafe/backend/internal/models"
 	"github.com/cheoscafe/backend/internal/repository"
@@ -26,20 +27,32 @@ func (s *CartService) GetCart(ctx context.Context, userID uuid.UUID) (*models.Ca
 	return s.cartRepo.GetByUserID(ctx, userID)
 }
 
-// AddItem agrega un producto al carrito o suma cantidad si ya existe
+// AddItem agrega un producto al carrito o suma cantidad si ya existe.
+// Solo valida que el producto exista y que haya stock suficiente.
+// is_active no se verifica aquí — un producto puede estar "inactivo"
+// visualmente pero aún tener stock comprable.
 func (s *CartService) AddItem(ctx context.Context, userID uuid.UUID, req *models.AddToCartRequest) (*models.Cart, error) {
-	// Validar que el producto existe y está activo
 	product, err := s.productRepo.GetByID(ctx, req.ProductID)
 	if err != nil {
 		return nil, errors.New("producto no encontrado")
-	}
-	if !product.IsActive {
-		return nil, errors.New("el producto no está disponible")
 	}
 
 	cart, err := s.cartRepo.GetByUserID(ctx, userID)
 	if err != nil {
 		return nil, err
+	}
+
+	// Calcular cantidad total resultante para validar contra stock
+	newQuantity := req.Quantity
+	for _, item := range cart.Items {
+		if item.ProductID == req.ProductID {
+			newQuantity += item.Quantity
+			break
+		}
+	}
+
+	if product.Stock < newQuantity {
+		return nil, fmt.Errorf("solo hay %d unidad(es) disponible(s) de %s", product.Stock, product.Name)
 	}
 
 	// Buscar si el producto ya está en el carrito
@@ -53,7 +66,6 @@ func (s *CartService) AddItem(ctx context.Context, userID uuid.UUID, req *models
 	}
 
 	if !found {
-		// Obtener la primera imagen del producto
 		productImage := ""
 		if len(product.Images) > 0 {
 			productImage = product.Images[0]
@@ -75,8 +87,18 @@ func (s *CartService) AddItem(ctx context.Context, userID uuid.UUID, req *models
 	return cart, nil
 }
 
-// UpdateItemQuantity actualiza la cantidad de un item en el carrito
+// UpdateItemQuantity actualiza la cantidad de un item en el carrito.
+// Valida que la nueva cantidad no supere el stock disponible.
 func (s *CartService) UpdateItemQuantity(ctx context.Context, userID uuid.UUID, productID uuid.UUID, req *models.UpdateCartItemRequest) (*models.Cart, error) {
+	product, err := s.productRepo.GetByID(ctx, productID)
+	if err != nil {
+		return nil, errors.New("producto no encontrado")
+	}
+
+	if product.Stock < req.Quantity {
+		return nil, fmt.Errorf("solo hay %d unidad(es) disponible(s) de %s", product.Stock, product.Name)
+	}
+
 	cart, err := s.cartRepo.GetByUserID(ctx, userID)
 	if err != nil {
 		return nil, err
@@ -129,7 +151,9 @@ func (s *CartService) ClearCart(ctx context.Context, userID uuid.UUID) error {
 	return s.cartRepo.Delete(ctx, userID)
 }
 
-// SyncCart fusiona el carrito local (invitado) con el guardado en Firebase
+// SyncCart fusiona el carrito local (invitado) con el guardado en Firebase.
+// Ignora productos que no existen. Respeta el stock — si la cantidad
+// fusionada supera el stock, se clampea al máximo disponible.
 func (s *CartService) SyncCart(ctx context.Context, userID uuid.UUID, req *models.SyncCartRequest) (*models.Cart, error) {
 	cart, err := s.cartRepo.GetByUserID(ctx, userID)
 	if err != nil {
@@ -137,20 +161,21 @@ func (s *CartService) SyncCart(ctx context.Context, userID uuid.UUID, req *model
 	}
 
 	for _, reqItem := range req.Items {
-		// Validar que el producto existe y está activo
 		product, err := s.productRepo.GetByID(ctx, reqItem.ProductID)
 		if err != nil {
-			continue // Ignorar productos que no existen
-		}
-		if !product.IsActive {
-			continue
+			continue // Producto no existe, ignorar
 		}
 
 		// Buscar si ya existe en el carrito guardado
 		found := false
 		for i, item := range cart.Items {
 			if item.ProductID == reqItem.ProductID {
-				cart.Items[i].Quantity += reqItem.Quantity
+				merged := item.Quantity + reqItem.Quantity
+				// Clampear al stock disponible
+				if merged > product.Stock {
+					merged = product.Stock
+				}
+				cart.Items[i].Quantity = merged
 				// Actualizar datos del producto por si cambiaron
 				cart.Items[i].ProductName = product.Name
 				cart.Items[i].ProductPrice = product.Price
@@ -163,6 +188,16 @@ func (s *CartService) SyncCart(ctx context.Context, userID uuid.UUID, req *model
 		}
 
 		if !found {
+			// Solo agregar si hay stock
+			if product.Stock <= 0 {
+				continue
+			}
+
+			qty := reqItem.Quantity
+			if qty > product.Stock {
+				qty = product.Stock
+			}
+
 			productImage := ""
 			if len(product.Images) > 0 {
 				productImage = product.Images[0]
@@ -173,7 +208,7 @@ func (s *CartService) SyncCart(ctx context.Context, userID uuid.UUID, req *model
 				ProductName:  product.Name,
 				ProductPrice: product.Price,
 				ProductImage: productImage,
-				Quantity:     reqItem.Quantity,
+				Quantity:     qty,
 			})
 		}
 	}
