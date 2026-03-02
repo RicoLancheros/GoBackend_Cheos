@@ -43,11 +43,15 @@ type Config struct {
 	SendGridFromEmail string
 	SendGridFromName  string
 
-	// SMTP Email (Gmail)
+	// SMTP (Gmail - local)
 	SMTPHost     string
 	SMTPPort     string
 	SMTPEmail    string
 	SMTPPassword string
+
+	// Resend (HTTP API - produccion)
+	ResendAPIKey string
+	ResendFrom   string
 
 	// Cloudinary
 	CloudinaryCloudName    string
@@ -112,11 +116,15 @@ func LoadConfig() (*Config, error) {
 		SendGridFromEmail: getEnv("SENDGRID_FROM_EMAIL", "pedidos@cheoscafe.com"),
 		SendGridFromName:  getEnv("SENDGRID_FROM_NAME", "Cheos Cafe"),
 
-		// SMTP Email (Gmail)
-		SMTPHost:     getEnv("SMTP_HOST", "smtp.gmail.com"),
+		// SMTP (Gmail - local)
+		SMTPHost:     getEnv("SMTP_HOST", ""),
 		SMTPPort:     getEnv("SMTP_PORT", "587"),
 		SMTPEmail:    getEnv("SMTP_EMAIL", ""),
 		SMTPPassword: getEnv("SMTP_PASSWORD", ""),
+
+		// Resend (HTTP API - produccion)
+		ResendAPIKey: getEnv("RESEND_API_KEY", ""),
+		ResendFrom:   getEnv("RESEND_FROM", "onboarding@resend.dev"),
 
 		// Cloudinary
 		CloudinaryCloudName:    getEnv("CLOUDINARY_CLOUD_NAME", ""),

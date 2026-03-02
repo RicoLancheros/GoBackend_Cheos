@@ -78,7 +78,15 @@ func main() {
 
 	// Initialize services
 	authService := services.NewAuthService(userRepo, cfg)
-	emailService := services.NewEmailService(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPEmail, cfg.SMTPPassword, cfg.FrontendURL)
+	emailService := services.NewEmailService(services.EmailConfig{
+		SMTPHost:     cfg.SMTPHost,
+		SMTPPort:     cfg.SMTPPort,
+		SMTPEmail:    cfg.SMTPEmail,
+		SMTPPassword: cfg.SMTPPassword,
+		ResendAPIKey: cfg.ResendAPIKey,
+		ResendFrom:   cfg.ResendFrom,
+		FrontendURL:  cfg.FrontendURL,
+	})
 	passwordResetService := services.NewPasswordResetService(passwordResetRepo, userRepo, emailService, cfg)
 	productService := services.NewProductService(productRepo)
 	cartService := services.NewCartService(cartRepo, productRepo)

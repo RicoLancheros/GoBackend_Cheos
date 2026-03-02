@@ -1,37 +1,72 @@
 package services
 
 import (
-	"crypto/tls"
+	"bytes"
+	"encoding/json"
 	"fmt"
+	"io"
 	"log"
 	"net"
+	"net/http"
 	"net/smtp"
 	"strings"
 	"time"
+
+	"crypto/tls"
 )
 
 type EmailService struct {
-	host        string
-	port        string
-	email       string
-	password    string
+	// SMTP (local)
+	smtpHost     string
+	smtpPort     string
+	smtpEmail    string
+	smtpPassword string
+
+	// Resend (produccion)
+	resendAPIKey string
+	resendFrom   string
+
 	frontendURL string
+	useResend   bool
 }
 
-func NewEmailService(host, port, email, password, frontendURL string) *EmailService {
-	log.Printf("[EMAIL] Servicio inicializado: host=%s, port=%s, email=%s, frontendURL=%s", host, port, email, frontendURL)
-	return &EmailService{
-		host:        host,
-		port:        port,
-		email:       email,
-		password:    password,
-		frontendURL: frontendURL,
+func NewEmailService(cfg EmailConfig) *EmailService {
+	// Si hay credenciales SMTP, usar SMTP (desarrollo local)
+	// Si no, usar Resend (produccion en Render)
+	useResend := cfg.SMTPEmail == "" || cfg.SMTPPassword == ""
+
+	if useResend {
+		log.Printf("[EMAIL] Modo: RESEND (HTTP API) - from=%s", cfg.ResendFrom)
+	} else {
+		log.Printf("[EMAIL] Modo: SMTP (Gmail) - email=%s, host=%s:%s", cfg.SMTPEmail, cfg.SMTPHost, cfg.SMTPPort)
 	}
+
+	return &EmailService{
+		smtpHost:     cfg.SMTPHost,
+		smtpPort:     cfg.SMTPPort,
+		smtpEmail:    cfg.SMTPEmail,
+		smtpPassword: cfg.SMTPPassword,
+		resendAPIKey: cfg.ResendAPIKey,
+		resendFrom:   cfg.ResendFrom,
+		frontendURL:  cfg.FrontendURL,
+		useResend:    useResend,
+	}
+}
+
+// EmailConfig agrupa las configuraciones de email
+type EmailConfig struct {
+	SMTPHost     string
+	SMTPPort     string
+	SMTPEmail    string
+	SMTPPassword string
+	ResendAPIKey string
+	ResendFrom   string
+	FrontendURL  string
 }
 
 // SendPasswordResetEmail envia un correo con el enlace para restablecer la contrasena
 func (s *EmailService) SendPasswordResetEmail(toEmail, toName, resetToken string) error {
-	log.Printf("[EMAIL] Intentando enviar email de reset a: %s", toEmail)
+	log.Printf("[EMAIL] Enviando email de reset a: %s (modo: %s)", toEmail, s.modeLabel())
 
 	resetURL := s.frontendURL + "/reset-password?token=" + resetToken
 
@@ -39,135 +74,137 @@ func (s *EmailService) SendPasswordResetEmail(toEmail, toName, resetToken string
 	body = strings.ReplaceAll(body, "{NOMBRE}", toName)
 	body = strings.ReplaceAll(body, "{RESET_URL}", resetURL)
 
-	message := fmt.Sprintf(
-		"From: Cheos Cafe <%s>\r\n"+
-			"To: %s\r\n"+
-			"Subject: Cheos Cafe - Restablecer contrasena\r\n"+
-			"MIME-Version: 1.0\r\n"+
-			"Content-Type: text/html; charset=UTF-8\r\n"+
-			"\r\n"+
-			"%s",
-		s.email, toEmail, body,
-	)
+	var err error
+	if s.useResend {
+		err = s.sendWithResend(toEmail, body)
+	} else {
+		err = s.sendWithSMTP(toEmail, body)
+	}
 
-	// Intentar TLS directo (puerto 465)
-	log.Printf("[EMAIL] Intentando TLS directo (puerto 465)...")
-	err := s.sendWithTLS(toEmail, message)
 	if err != nil {
-		log.Printf("[EMAIL] TLS directo FALLO: %v", err)
-
-		// Intentar STARTTLS (puerto 587)
-		log.Printf("[EMAIL] Intentando STARTTLS (puerto %s)...", s.port)
-		err = s.sendWithSTARTTLS(toEmail, message)
-		if err != nil {
-			log.Printf("[EMAIL] STARTTLS FALLO: %v", err)
-			return fmt.Errorf("ambos metodos fallaron - TLS y STARTTLS: %w", err)
-		}
+		return err
 	}
 
 	log.Printf("[EMAIL] Email enviado exitosamente a: %s", toEmail)
 	return nil
 }
 
-// sendWithTLS usa conexion TLS directa (puerto 465)
-func (s *EmailService) sendWithTLS(toEmail, message string) error {
-	addr := s.host + ":465"
+func (s *EmailService) modeLabel() string {
+	if s.useResend {
+		return "RESEND"
+	}
+	return "SMTP"
+}
 
-	// Timeout de 10 segundos para la conexion
-	dialer := &net.Dialer{Timeout: 10 * time.Second}
-	tlsConfig := &tls.Config{ServerName: s.host}
+// ==================== RESEND (HTTP) ====================
 
-	conn, err := tls.DialWithDialer(dialer, "tcp", addr, tlsConfig)
+type resendRequest struct {
+	From    string   `json:"from"`
+	To      []string `json:"to"`
+	Subject string   `json:"subject"`
+	HTML    string   `json:"html"`
+}
+
+func (s *EmailService) sendWithResend(toEmail, htmlBody string) error {
+	payload := resendRequest{
+		From:    fmt.Sprintf("Cheos Cafe <%s>", s.resendFrom),
+		To:      []string{toEmail},
+		Subject: "Cheos Cafe - Restablecer contraseña",
+		HTML:    htmlBody,
+	}
+
+	jsonData, err := json.Marshal(payload)
 	if err != nil {
-		return fmt.Errorf("conexion TLS a %s: %w", addr, err)
+		return fmt.Errorf("error serializando payload: %w", err)
 	}
-	defer conn.Close()
 
-	// Timeout de 10 segundos para operaciones SMTP
-	conn.SetDeadline(time.Now().Add(10 * time.Second))
-
-	client, err := smtp.NewClient(conn, s.host)
+	req, err := http.NewRequest("POST", "https://api.resend.com/emails", bytes.NewBuffer(jsonData))
 	if err != nil {
-		return fmt.Errorf("cliente SMTP: %w", err)
-	}
-	defer client.Quit()
-
-	auth := smtp.PlainAuth("", s.email, s.password, s.host)
-	if err := client.Auth(auth); err != nil {
-		return fmt.Errorf("autenticacion: %w", err)
+		return fmt.Errorf("error creando request: %w", err)
 	}
 
-	if err := client.Mail(s.email); err != nil {
-		return fmt.Errorf("MAIL FROM: %w", err)
-	}
-	if err := client.Rcpt(toEmail); err != nil {
-		return fmt.Errorf("RCPT TO: %w", err)
-	}
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+s.resendAPIKey)
 
-	w, err := client.Data()
+	client := &http.Client{Timeout: 15 * time.Second}
+	resp, err := client.Do(req)
 	if err != nil {
-		return fmt.Errorf("DATA: %w", err)
+		return fmt.Errorf("error enviando request a Resend: %w", err)
 	}
-	if _, err := w.Write([]byte(message)); err != nil {
-		return fmt.Errorf("escribiendo mensaje: %w", err)
-	}
-	if err := w.Close(); err != nil {
-		return fmt.Errorf("cerrando writer: %w", err)
+	defer resp.Body.Close()
+
+	respBody, _ := io.ReadAll(resp.Body)
+
+	if resp.StatusCode >= 400 {
+		log.Printf("[EMAIL] Resend error %d: %s", resp.StatusCode, string(respBody))
+		return fmt.Errorf("resend error %d: %s", resp.StatusCode, string(respBody))
 	}
 
 	return nil
 }
 
-// sendWithSTARTTLS usa STARTTLS (puerto 587)
-func (s *EmailService) sendWithSTARTTLS(toEmail, message string) error {
-	addr := s.host + ":" + s.port
+// ==================== SMTP (Gmail) ====================
 
-	// Timeout de 10 segundos para la conexion
+func (s *EmailService) sendWithSMTP(toEmail, htmlBody string) error {
+	message := fmt.Sprintf(
+		"From: Cheos Cafe <%s>\r\n"+
+			"To: %s\r\n"+
+			"Subject: Cheos Cafe - Restablecer contraseña\r\n"+
+			"MIME-Version: 1.0\r\n"+
+			"Content-Type: text/html; charset=UTF-8\r\n"+
+			"\r\n"+
+			"%s",
+		s.smtpEmail, toEmail, htmlBody,
+	)
+
+	addr := s.smtpHost + ":" + s.smtpPort
+
 	conn, err := net.DialTimeout("tcp", addr, 10*time.Second)
 	if err != nil {
-		return fmt.Errorf("conexion a %s: %w", addr, err)
+		return fmt.Errorf("error conectando a %s: %w", addr, err)
 	}
 
-	// Timeout de 10 segundos para operaciones SMTP
-	conn.SetDeadline(time.Now().Add(10 * time.Second))
+	conn.SetDeadline(time.Now().Add(15 * time.Second))
 
-	client, err := smtp.NewClient(conn, s.host)
+	client, err := smtp.NewClient(conn, s.smtpHost)
 	if err != nil {
 		conn.Close()
-		return fmt.Errorf("cliente SMTP: %w", err)
+		return fmt.Errorf("error creando cliente SMTP: %w", err)
 	}
 	defer client.Quit()
 
-	tlsConfig := &tls.Config{ServerName: s.host}
+	tlsConfig := &tls.Config{ServerName: s.smtpHost}
 	if err := client.StartTLS(tlsConfig); err != nil {
-		return fmt.Errorf("STARTTLS: %w", err)
+		return fmt.Errorf("error STARTTLS: %w", err)
 	}
 
-	auth := smtp.PlainAuth("", s.email, s.password, s.host)
+	auth := smtp.PlainAuth("", s.smtpEmail, s.smtpPassword, s.smtpHost)
 	if err := client.Auth(auth); err != nil {
-		return fmt.Errorf("autenticacion: %w", err)
+		return fmt.Errorf("error autenticando: %w", err)
 	}
 
-	if err := client.Mail(s.email); err != nil {
-		return fmt.Errorf("MAIL FROM: %w", err)
+	if err := client.Mail(s.smtpEmail); err != nil {
+		return fmt.Errorf("error MAIL FROM: %w", err)
 	}
 	if err := client.Rcpt(toEmail); err != nil {
-		return fmt.Errorf("RCPT TO: %w", err)
+		return fmt.Errorf("error RCPT TO: %w", err)
 	}
 
 	w, err := client.Data()
 	if err != nil {
-		return fmt.Errorf("DATA: %w", err)
+		return fmt.Errorf("error DATA: %w", err)
 	}
 	if _, err := w.Write([]byte(message)); err != nil {
-		return fmt.Errorf("escribiendo mensaje: %w", err)
+		return fmt.Errorf("error escribiendo mensaje: %w", err)
 	}
 	if err := w.Close(); err != nil {
-		return fmt.Errorf("cerrando writer: %w", err)
+		return fmt.Errorf("error cerrando writer: %w", err)
 	}
 
 	return nil
 }
+
+// ==================== TEMPLATE ====================
 
 const passwordResetTemplate = `<!DOCTYPE html>
 <html>
@@ -178,17 +215,17 @@ const passwordResetTemplate = `<!DOCTYPE html>
   <div style="max-width: 500px; margin: 0 auto; background: white; border-radius: 12px; padding: 30px; box-shadow: 0 2px 10px rgba(0,0,0,0.1);">
     <h1 style="color: #6F4E37; text-align: center;">Cheos Cafe</h1>
     <p>Hola <strong>{NOMBRE}</strong>,</p>
-    <p>Recibimos una solicitud para restablecer la contrasena de tu cuenta.</p>
-    <p>Haz clic en el siguiente boton para crear una nueva contrasena:</p>
+    <p>Recibimos una solicitud para restablecer la contraseña de tu cuenta.</p>
+    <p>Haz clic en el siguiente botón para crear una nueva contraseña:</p>
     <div style="text-align: center; margin: 25px 0;">
       <a href="{RESET_URL}" style="background-color: #6F4E37; color: white; padding: 12px 30px; text-decoration: none; border-radius: 8px; font-size: 16px;">
-        Restablecer contrasena
+        Restablecer contraseña
       </a>
     </div>
     <p style="color: #888; font-size: 13px;">Este enlace expira en 15 minutos.</p>
-    <p style="color: #888; font-size: 13px;">Si no solicitaste este cambio, puedes ignorar este correo. Tu contrasena no sera modificada.</p>
+    <p style="color: #888; font-size: 13px;">Si no solicitaste este cambio, puedes ignorar este correo. Tu contraseña no será modificada.</p>
     <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
-    <p style="color: #aaa; font-size: 11px; text-align: center;">Cheos Cafe - Cafe de especialidad colombiano</p>
+    <p style="color: #aaa; font-size: 11px; text-align: center;">Cheos Cafe - Café de especialidad colombiano</p>
   </div>
 </body>
 </html>`

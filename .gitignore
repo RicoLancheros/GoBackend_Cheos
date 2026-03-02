@@ -83,6 +83,8 @@ ConexionCloudinary.md
 MigracionClaude.md
 ContextoSesion.md
 ImplementacionResend.md
+ImplementacionResetPassword.md
+ContextoServicioDashboard.md
 
 # Local dev scripts
 run.ps1
