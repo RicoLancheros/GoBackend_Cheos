@@ -11,11 +11,15 @@ import (
 )
 
 type AuthHandler struct {
-	authService *services.AuthService
+	authService          *services.AuthService
+	passwordResetService *services.PasswordResetService
 }
 
-func NewAuthHandler(authService *services.AuthService) *AuthHandler {
-	return &AuthHandler{authService: authService}
+func NewAuthHandler(authService *services.AuthService, passwordResetService *services.PasswordResetService) *AuthHandler {
+	return &AuthHandler{
+		authService:          authService,
+		passwordResetService: passwordResetService,
+	}
 }
 
 // Register maneja el registro de usuarios
@@ -23,7 +27,7 @@ func (h *AuthHandler) Register(c *gin.Context) {
 	var req models.RegisterRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.ErrorResponse(c, http.StatusBadRequest, "Datos inválidos", err.Error())
+		utils.ErrorResponse(c, http.StatusBadRequest, "Datos invalidos", err.Error())
 		return
 	}
 
@@ -48,7 +52,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	var req models.LoginRequest
 
 	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.ErrorResponse(c, http.StatusBadRequest, "Datos inválidos", err.Error())
+		utils.ErrorResponse(c, http.StatusBadRequest, "Datos invalidos", err.Error())
 		return
 	}
 
@@ -61,7 +65,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	// Login
 	response, err := h.authService.Login(c.Request.Context(), &req)
 	if err != nil {
-		utils.ErrorResponse(c, http.StatusUnauthorized, "Credenciales inválidas", err.Error())
+		utils.ErrorResponse(c, http.StatusUnauthorized, "Credenciales invalidas", err.Error())
 		return
 	}
 
@@ -72,16 +76,16 @@ func (h *AuthHandler) Login(c *gin.Context) {
 		response.AccessToken,        // valor
 		86400,                       // maxAge en segundos (24 horas)
 		"/",                         // path
-		"",                          // domain (vacío = dominio actual)
-		false,                       // secure (false en desarrollo, true en producción)
+		"",                          // domain (vacio = dominio actual)
+		false,                       // secure (false en desarrollo, true en produccion)
 		true,                        // httpOnly (JavaScript no puede acceder)
 	)
 
-	// Refresh Token - expira en 7 días (604800 segundos)
+	// Refresh Token - expira en 7 dias (604800 segundos)
 	c.SetCookie(
 		"refresh_token",             // nombre
 		response.RefreshToken,       // valor
-		604800,                      // maxAge en segundos (7 días)
+		604800,                      // maxAge en segundos (7 dias)
 		"/",                         // path
 		"",                          // domain
 		false,                       // secure
@@ -91,7 +95,7 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	utils.SuccessResponse(c, http.StatusOK, "Login exitoso", response)
 }
 
-// RefreshToken maneja la renovación de tokens
+// RefreshToken maneja la renovacion de tokens
 func (h *AuthHandler) RefreshToken(c *gin.Context) {
 	var req struct {
 		RefreshToken string `json:"refresh_token" binding:"required"`
@@ -105,7 +109,7 @@ func (h *AuthHandler) RefreshToken(c *gin.Context) {
 	// Renovar token
 	accessToken, err := h.authService.RefreshToken(c.Request.Context(), req.RefreshToken)
 	if err != nil {
-		utils.ErrorResponse(c, http.StatusUnauthorized, "Refresh token inválido", err.Error())
+		utils.ErrorResponse(c, http.StatusUnauthorized, "Refresh token invalido", err.Error())
 		return
 	}
 
@@ -152,7 +156,7 @@ func (h *AuthHandler) UpdateProfile(c *gin.Context) {
 
 	var req models.UpdateProfileRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.ErrorResponse(c, http.StatusBadRequest, "Datos inválidos", err.Error())
+		utils.ErrorResponse(c, http.StatusBadRequest, "Datos invalidos", err.Error())
 		return
 	}
 
@@ -171,12 +175,12 @@ func (h *AuthHandler) UpdateProfile(c *gin.Context) {
 	utils.SuccessResponse(c, http.StatusOK, "Perfil actualizado exitosamente", user)
 }
 
-// Logout cierra la sesión del usuario eliminando las cookies
+// Logout cierra la sesion del usuario eliminando las cookies
 func (h *AuthHandler) Logout(c *gin.Context) {
 	// Eliminar cookie access_token (MaxAge=-1 elimina la cookie)
 	c.SetCookie(
 		"access_token",  // nombre
-		"",              // valor vacío
+		"",              // valor vacio
 		-1,              // maxAge=-1 elimina la cookie
 		"/",             // path
 		"",              // domain
@@ -187,7 +191,7 @@ func (h *AuthHandler) Logout(c *gin.Context) {
 	// Eliminar cookie refresh_token
 	c.SetCookie(
 		"refresh_token", // nombre
-		"",              // valor vacío
+		"",              // valor vacio
 		-1,              // maxAge=-1 elimina la cookie
 		"/",             // path
 		"",              // domain
@@ -215,7 +219,7 @@ func (h *AuthHandler) UpdateUserByID(c *gin.Context) {
 
 	var req models.UpdateUserByIDRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
-		utils.ErrorResponse(c, http.StatusBadRequest, "Datos inválidos", err.Error())
+		utils.ErrorResponse(c, http.StatusBadRequest, "Datos invalidos", err.Error())
 		return
 	}
 
@@ -245,4 +249,54 @@ func (h *AuthHandler) DeleteUser(c *gin.Context) {
 	}
 
 	utils.SuccessResponse(c, http.StatusOK, "Usuario eliminado exitosamente", nil)
+}
+
+// ForgotPassword maneja la solicitud de restablecimiento de contrasena
+func (h *AuthHandler) ForgotPassword(c *gin.Context) {
+	var req models.ForgotPasswordRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, "Datos invalidos", err.Error())
+		return
+	}
+
+	// Validar
+	if err := utils.ValidateStruct(&req); err != nil {
+		utils.ValidationErrorResponse(c, utils.FormatValidationErrors(err))
+		return
+	}
+
+	// Ejecutar logica de forgot password
+	if err := h.passwordResetService.ForgotPassword(c.Request.Context(), req.Email); err != nil {
+		utils.ErrorResponse(c, http.StatusInternalServerError, "Error interno del servidor", nil)
+		return
+	}
+
+	// Siempre responder 200 con mensaje generico (por seguridad, no revelar si el email existe)
+	utils.SuccessResponse(c, http.StatusOK,
+		"Si el correo esta registrado, recibiras un email para restablecer tu contrasena", nil)
+}
+
+// ResetPassword maneja la confirmacion de nueva contrasena
+func (h *AuthHandler) ResetPassword(c *gin.Context) {
+	var req models.ResetPasswordRequest
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, "Datos invalidos", err.Error())
+		return
+	}
+
+	// Validar
+	if err := utils.ValidateStruct(&req); err != nil {
+		utils.ValidationErrorResponse(c, utils.FormatValidationErrors(err))
+		return
+	}
+
+	// Ejecutar logica de reset password
+	if err := h.passwordResetService.ResetPassword(c.Request.Context(), req.Token, req.NewPassword); err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, err.Error(), nil)
+		return
+	}
+
+	utils.SuccessResponse(c, http.StatusOK, "Contrasena actualizada exitosamente", nil)
 }

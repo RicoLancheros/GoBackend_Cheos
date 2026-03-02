@@ -194,6 +194,52 @@
 						}
 					},
 					"response": []
+				},
+				{
+					"name": "Forgot Password (Public)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"cliente@ejemplo.com\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/forgot-password",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "forgot-password"]
+						},
+						"description": "Solicita el restablecimiento de contraseña. Envia un correo al email proporcionado con un enlace de reset que expira en 15 minutos. Por seguridad, siempre responde con exito aunque el email no exista."
+					},
+					"response": []
+				},
+				{
+					"name": "Reset Password (Public)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"token\": \"jwt-token-recibido-por-email\",\n  \"new_password\": \"NuevaPassword123\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/api/v1/auth/reset-password",
+							"host": ["{{base_url}}"],
+							"path": ["api", "v1", "auth", "reset-password"]
+						},
+						"description": "Confirma el cambio de contraseña usando el token recibido por email. El token es de un solo uso y expira en 15 minutos. La nueva contraseña debe tener minimo 6 caracteres."
+					},
+					"response": []
 				}
 			]
 		},

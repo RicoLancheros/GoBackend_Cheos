@@ -17,7 +17,7 @@ type Config struct {
 	// Firebase
 	FirebaseProjectID       string
 	FirebaseCredentialsPath string
-	FirebaseCredentialsJSON string // Para Render/producción (JSON completo como string)
+	FirebaseCredentialsJSON string // Para Render/produccion (JSON completo como string)
 	FirebaseStorageBucket   string
 
 	// Redis (Upstash)
@@ -39,19 +39,25 @@ type Config struct {
 	MPWebhookSecret string
 
 	// SendGrid
-	SendGridAPIKey   string
+	SendGridAPIKey    string
 	SendGridFromEmail string
 	SendGridFromName  string
 
+	// SMTP Email (Gmail)
+	SMTPHost     string
+	SMTPPort     string
+	SMTPEmail    string
+	SMTPPassword string
+
 	// Cloudinary
-	CloudinaryCloudName   string
-	CloudinaryAPIKey      string
-	CloudinaryAPISecret   string
+	CloudinaryCloudName    string
+	CloudinaryAPIKey       string
+	CloudinaryAPISecret    string
 	CloudinaryUploadPreset string
 
 	// WhatsApp
-	WhatsAppPhoneNumber        string
-	WhatsAppBusinessAPIToken   string
+	WhatsAppPhoneNumber      string
+	WhatsAppBusinessAPIToken string
 
 	// CORS
 	CORSAllowedOrigins string
@@ -104,7 +110,13 @@ func LoadConfig() (*Config, error) {
 		// SendGrid
 		SendGridAPIKey:    getEnv("SENDGRID_API_KEY", ""),
 		SendGridFromEmail: getEnv("SENDGRID_FROM_EMAIL", "pedidos@cheoscafe.com"),
-		SendGridFromName:  getEnv("SENDGRID_FROM_NAME", "Cheos Café"),
+		SendGridFromName:  getEnv("SENDGRID_FROM_NAME", "Cheos Cafe"),
+
+		// SMTP Email (Gmail)
+		SMTPHost:     getEnv("SMTP_HOST", "smtp.gmail.com"),
+		SMTPPort:     getEnv("SMTP_PORT", "587"),
+		SMTPEmail:    getEnv("SMTP_EMAIL", ""),
+		SMTPPassword: getEnv("SMTP_PASSWORD", ""),
 
 		// Cloudinary
 		CloudinaryCloudName:    getEnv("CLOUDINARY_CLOUD_NAME", ""),

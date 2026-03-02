@@ -71,12 +71,15 @@ func main() {
 	galleryRepo := repository.NewGalleryRepository(firebaseClient)
 	siteConfigRepo := repository.NewSiteConfigRepository(firebaseClient)
 	cartRepo := repository.NewCartRepository(firebaseClient)
+	passwordResetRepo := repository.NewPasswordResetRepository(firebaseClient)
 
 	// Initialize repositories (dashboard)
 	dashboardRepo := repository.NewDashboardRepository(firebaseClient)
 
 	// Initialize services
 	authService := services.NewAuthService(userRepo, cfg)
+	emailService := services.NewEmailService(cfg.SMTPHost, cfg.SMTPPort, cfg.SMTPEmail, cfg.SMTPPassword, cfg.FrontendURL)
+	passwordResetService := services.NewPasswordResetService(passwordResetRepo, userRepo, emailService, cfg)
 	productService := services.NewProductService(productRepo)
 	cartService := services.NewCartService(cartRepo, productRepo)
 	dashboardService := services.NewDashboardService(dashboardRepo, orderRepo, userRepo)
@@ -98,7 +101,7 @@ func main() {
 	}
 
 	// Initialize handlers
-	authHandler := handlers.NewAuthHandler(authService)
+	authHandler := handlers.NewAuthHandler(authService, passwordResetService)
 	productHandler := handlers.NewProductHandler(productService)
 	orderHandler := handlers.NewOrderHandler(orderService)
 	discountHandler := handlers.NewDiscountHandler(discountService)
@@ -191,7 +194,7 @@ func setupRoutes(
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"status":  "ok",
-			"message": "Cheos Café Backend API is running",
+			"message": "Cheos Cafe Backend API is running",
 			"version": cfg.APIVersion,
 		})
 	})
@@ -241,6 +244,8 @@ func setupRoutes(
 			auth.POST("/login", middleware.LoginRateLimiter(), authHandler.Login)
 			auth.POST("/refresh", authHandler.RefreshToken)
 			auth.POST("/logout", authHandler.Logout)
+			auth.POST("/forgot-password", authHandler.ForgotPassword)
+			auth.POST("/reset-password", authHandler.ResetPassword)
 		}
 
 		// User profile routes (protected)
