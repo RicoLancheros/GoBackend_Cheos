@@ -1,7 +1,9 @@
 package services
 
 import (
+	"crypto/tls"
 	"fmt"
+	"net"
 	"net/smtp"
 	"strings"
 )
@@ -45,19 +47,117 @@ func (s *EmailService) SendPasswordResetEmail(toEmail, toName, resetToken string
 		s.email, toEmail, body,
 	)
 
-	// Autenticar con Gmail SMTP
-	auth := smtp.PlainAuth("", s.email, s.password, s.host)
+	// Intentar primero con TLS directo (puerto 465), luego STARTTLS (puerto 587)
+	err := s.sendWithTLS(toEmail, message)
+	if err != nil {
+		fmt.Printf("TLS directo fallo: %v, intentando STARTTLS...\n", err)
+		err = s.sendWithSTARTTLS(toEmail, message)
+	}
 
-	// Enviar email (smtp.SendMail maneja STARTTLS automaticamente en puerto 587)
-	err := smtp.SendMail(
-		s.host+":"+s.port,
-		auth,
-		s.email,
-		[]string{toEmail},
-		[]byte(message),
-	)
 	if err != nil {
 		return fmt.Errorf("error enviando email de reset: %w", err)
+	}
+
+	return nil
+}
+
+// sendWithTLS usa conexion TLS directa (puerto 465) - funciona en la mayoria de cloud providers
+func (s *EmailService) sendWithTLS(toEmail, message string) error {
+	addr := s.host + ":465"
+
+	tlsConfig := &tls.Config{
+		ServerName: s.host,
+	}
+
+	conn, err := tls.Dial("tcp", addr, tlsConfig)
+	if err != nil {
+		return fmt.Errorf("error conectando TLS a %s: %w", addr, err)
+	}
+	defer conn.Close()
+
+	client, err := smtp.NewClient(conn, s.host)
+	if err != nil {
+		return fmt.Errorf("error creando cliente SMTP: %w", err)
+	}
+	defer client.Quit()
+
+	auth := smtp.PlainAuth("", s.email, s.password, s.host)
+	if err := client.Auth(auth); err != nil {
+		return fmt.Errorf("error autenticando: %w", err)
+	}
+
+	if err := client.Mail(s.email); err != nil {
+		return fmt.Errorf("error MAIL FROM: %w", err)
+	}
+
+	if err := client.Rcpt(toEmail); err != nil {
+		return fmt.Errorf("error RCPT TO: %w", err)
+	}
+
+	w, err := client.Data()
+	if err != nil {
+		return fmt.Errorf("error DATA: %w", err)
+	}
+
+	if _, err := w.Write([]byte(message)); err != nil {
+		return fmt.Errorf("error escribiendo mensaje: %w", err)
+	}
+
+	if err := w.Close(); err != nil {
+		return fmt.Errorf("error cerrando writer: %w", err)
+	}
+
+	return nil
+}
+
+// sendWithSTARTTLS usa STARTTLS (puerto 587) - funciona en local y algunos providers
+func (s *EmailService) sendWithSTARTTLS(toEmail, message string) error {
+	addr := s.host + ":" + s.port
+
+	conn, err := net.Dial("tcp", addr)
+	if err != nil {
+		return fmt.Errorf("error conectando a %s: %w", addr, err)
+	}
+
+	client, err := smtp.NewClient(conn, s.host)
+	if err != nil {
+		conn.Close()
+		return fmt.Errorf("error creando cliente SMTP: %w", err)
+	}
+	defer client.Quit()
+
+	tlsConfig := &tls.Config{
+		ServerName: s.host,
+	}
+
+	if err := client.StartTLS(tlsConfig); err != nil {
+		return fmt.Errorf("error STARTTLS: %w", err)
+	}
+
+	auth := smtp.PlainAuth("", s.email, s.password, s.host)
+	if err := client.Auth(auth); err != nil {
+		return fmt.Errorf("error autenticando: %w", err)
+	}
+
+	if err := client.Mail(s.email); err != nil {
+		return fmt.Errorf("error MAIL FROM: %w", err)
+	}
+
+	if err := client.Rcpt(toEmail); err != nil {
+		return fmt.Errorf("error RCPT TO: %w", err)
+	}
+
+	w, err := client.Data()
+	if err != nil {
+		return fmt.Errorf("error DATA: %w", err)
+	}
+
+	if _, err := w.Write([]byte(message)); err != nil {
+		return fmt.Errorf("error escribiendo mensaje: %w", err)
+	}
+
+	if err := w.Close(); err != nil {
+		return fmt.Errorf("error cerrando writer: %w", err)
 	}
 
 	return nil

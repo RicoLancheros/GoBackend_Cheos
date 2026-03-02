@@ -77,7 +77,11 @@ func (s *PasswordResetService) ForgotPassword(ctx context.Context, email string)
 
 	// Enviar email en goroutine (no bloquear la respuesta HTTP)
 	// Si el email falla, el usuario puede reintentar pidiendo otro token
-	go s.emailService.SendPasswordResetEmail(user.Email, user.Name, token)
+	go func() {
+		if err := s.emailService.SendPasswordResetEmail(user.Email, user.Name, token); err != nil {
+			fmt.Printf("ERROR enviando email de reset a %s: %v\n", user.Email, err)
+		}
+	}()
 
 	return nil
 }
