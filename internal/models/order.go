@@ -11,20 +11,21 @@ type PaymentStatus string
 type OrderStatus string
 
 const (
-	PaymentMercadoPago  PaymentMethod = "MERCADO_PAGO"
+	PaymentMercadoPago   PaymentMethod = "MERCADO_PAGO"
 	PaymentContraEntrega PaymentMethod = "CONTRA_ENTREGA"
+	PaymentWompi         PaymentMethod = "WOMPI" // ✅ NEW
 
 	PaymentPending  PaymentStatus = "PENDING"
 	PaymentApproved PaymentStatus = "APPROVED"
 	PaymentRejected PaymentStatus = "REJECTED"
 	PaymentRefunded PaymentStatus = "REFUNDED"
 
-	OrderPending   OrderStatus = "PENDING"
-	OrderConfirmed OrderStatus = "CONFIRMED"
+	OrderPending    OrderStatus = "PENDING"
+	OrderConfirmed  OrderStatus = "CONFIRMED"
 	OrderProcessing OrderStatus = "PROCESSING"
-	OrderShipped   OrderStatus = "SHIPPED"
-	OrderDelivered OrderStatus = "DELIVERED"
-	OrderCancelled OrderStatus = "CANCELLED"
+	OrderShipped    OrderStatus = "SHIPPED"
+	OrderDelivered  OrderStatus = "DELIVERED"
+	OrderCancelled  OrderStatus = "CANCELLED"
 )
 
 type ShippingAddress struct {
@@ -37,26 +38,27 @@ type ShippingAddress struct {
 }
 
 type Order struct {
-	ID              uuid.UUID        `json:"id" firestore:"id"`
-	OrderNumber     string           `json:"order_number" firestore:"order_number"`
-	UserID          *uuid.UUID       `json:"user_id" firestore:"user_id"`
-	CustomerName    string           `json:"customer_name" firestore:"customer_name"`
-	CustomerEmail   string           `json:"customer_email" firestore:"customer_email"`
-	CustomerPhone   string           `json:"customer_phone" firestore:"customer_phone"`
-	Subtotal        float64          `json:"subtotal" firestore:"subtotal"`
-	Discount        float64          `json:"discount" firestore:"discount"`
-	Total           float64          `json:"total" firestore:"total"`
-	PaymentMethod   PaymentMethod    `json:"payment_method" firestore:"payment_method"`
-	PaymentStatus   PaymentStatus    `json:"payment_status" firestore:"payment_status"`
-	MPPaymentID     *string          `json:"mp_payment_id" firestore:"mp_payment_id"`
-	Status          OrderStatus      `json:"status" firestore:"status"`
-	ShippingAddress *ShippingAddress `json:"shipping_address" firestore:"shipping_address"`
-	DiscountCodeID  *uuid.UUID       `json:"discount_code_id" firestore:"discount_code_id"`
-	UTMSource       string           `json:"utm_source" firestore:"utm_source"`
-	UTMMedium       string           `json:"utm_medium" firestore:"utm_medium"`
-	UTMCampaign     string           `json:"utm_campaign" firestore:"utm_campaign"`
-	CreatedAt       time.Time        `json:"created_at" firestore:"created_at"`
-	UpdatedAt       time.Time        `json:"updated_at" firestore:"updated_at"`
+	ID                 uuid.UUID        `json:"id" firestore:"id"`
+	OrderNumber        string           `json:"order_number" firestore:"order_number"`
+	UserID             *uuid.UUID       `json:"user_id" firestore:"user_id"`
+	CustomerName       string           `json:"customer_name" firestore:"customer_name"`
+	CustomerEmail      string           `json:"customer_email" firestore:"customer_email"`
+	CustomerPhone      string           `json:"customer_phone" firestore:"customer_phone"`
+	Subtotal           float64          `json:"subtotal" firestore:"subtotal"`
+	Discount           float64          `json:"discount" firestore:"discount"`
+	Total              float64          `json:"total" firestore:"total"`
+	PaymentMethod      PaymentMethod    `json:"payment_method" firestore:"payment_method"`
+	PaymentStatus      PaymentStatus    `json:"payment_status" firestore:"payment_status"`
+	MPPaymentID        *string          `json:"mp_payment_id" firestore:"mp_payment_id"`
+	WompiTransactionID *string          `json:"wompi_transaction_id" firestore:"wompi_transaction_id"` // ✅ NEW
+	Status             OrderStatus      `json:"status" firestore:"status"`
+	ShippingAddress    *ShippingAddress `json:"shipping_address" firestore:"shipping_address"`
+	DiscountCodeID     *uuid.UUID       `json:"discount_code_id" firestore:"discount_code_id"`
+	UTMSource          string           `json:"utm_source" firestore:"utm_source"`
+	UTMMedium          string           `json:"utm_medium" firestore:"utm_medium"`
+	UTMCampaign        string           `json:"utm_campaign" firestore:"utm_campaign"`
+	CreatedAt          time.Time        `json:"created_at" firestore:"created_at"`
+	UpdatedAt          time.Time        `json:"updated_at" firestore:"updated_at"`
 }
 
 type OrderItem struct {

@@ -80,12 +80,15 @@ func main() {
 	productService := services.NewProductService(productRepo)
 	cartService := services.NewCartService(cartRepo, productRepo)
 	dashboardService := services.NewDashboardService(dashboardRepo, orderRepo, userRepo)
-	discountService := services.NewDiscountService(discountRepo)                                                  // FIX: movido antes de orderService
-	orderService := services.NewOrderService(orderRepo, productRepo, cartRepo, dashboardService, discountService) // FIX: discountService inyectado
+	discountService := services.NewDiscountService(discountRepo)
+	orderService := services.NewOrderService(orderRepo, productRepo, cartRepo, dashboardService, discountService)
 	reviewService := services.NewReviewService(reviewRepo, productRepo)
 	locationService := services.NewLocationService(locationRepo)
 	galleryService := services.NewGalleryService(galleryRepo)
 	siteConfigService := services.NewSiteConfigService(siteConfigRepo)
+
+	// ✅ NEW: Initialize Wompi service
+	wompiService := services.NewWompiService()
 
 	// Initialize upload service (Cloudinary)
 	uploadService, err := services.NewUploadService(cfg)
@@ -106,6 +109,9 @@ func main() {
 	cartHandler := handlers.NewCartHandler(cartService)
 	dashboardHandler := handlers.NewDashboardHandler(dashboardService)
 
+	// ✅ NEW: Initialize Wompi handler
+	wompiHandler := handlers.NewWompiHandler(wompiService)
+
 	// Initialize Gin router
 	router := gin.Default()
 
@@ -117,7 +123,14 @@ func main() {
 	router.Use(middleware.RateLimiter(cfg.RateLimitRequests, rateLimitDuration))
 
 	// Setup routes
-	setupRoutes(router, cfg, firebaseClient, redisClient, authHandler, productHandler, orderHandler, discountHandler, reviewHandler, locationHandler, galleryHandler, siteConfigHandler, cartHandler, dashboardHandler, logger)
+	setupRoutes(
+		router, cfg, firebaseClient, redisClient,
+		authHandler, productHandler, orderHandler, discountHandler,
+		reviewHandler, locationHandler, galleryHandler, siteConfigHandler,
+		cartHandler, dashboardHandler,
+		wompiHandler, // ✅ NEW
+		logger,
+	)
 
 	// Create HTTP server
 	srv := &http.Server{
@@ -171,6 +184,7 @@ func setupRoutes(
 	siteConfigHandler *handlers.SiteConfigHandler,
 	cartHandler *handlers.CartHandler,
 	dashboardHandler *handlers.DashboardHandler,
+	wompiHandler *handlers.WompiHandler, // ✅ NEW
 	logger *logrus.Logger,
 ) {
 	// Health check endpoints
@@ -236,7 +250,6 @@ func setupRoutes(
 			users.GET("/me", authHandler.GetProfile)
 			users.PUT("/me", authHandler.UpdateProfile)
 
-			// Admin only routes
 			adminUsers := users.Group("")
 			adminUsers.Use(middleware.RequireAdmin())
 			{
@@ -249,13 +262,11 @@ func setupRoutes(
 		// Product routes (public read, admin write)
 		products := v1.Group("/products")
 		{
-			// Public routes
 			products.GET("", productHandler.GetAllProducts)
 			products.GET("/featured", productHandler.GetFeaturedProducts)
 			products.GET("/search", productHandler.SearchProducts)
 			products.GET("/:id", productHandler.GetProduct)
 
-			// Admin only routes
 			adminProducts := products.Group("")
 			adminProducts.Use(middleware.AuthMiddleware(cfg))
 			adminProducts.Use(middleware.RequireAdmin())
@@ -270,11 +281,9 @@ func setupRoutes(
 		// Order routes
 		orders := v1.Group("/orders")
 		{
-			// Public routes (guest checkout)
 			orders.POST("", orderHandler.CreateOrder)
 			orders.GET("/number/:number", orderHandler.GetOrderByNumber)
 
-			// Authenticated user routes
 			userOrders := orders.Group("")
 			userOrders.Use(middleware.AuthMiddleware(cfg))
 			{
@@ -282,7 +291,6 @@ func setupRoutes(
 				userOrders.GET("/:id", orderHandler.GetOrder)
 			}
 
-			// Admin only routes
 			adminOrders := orders.Group("")
 			adminOrders.Use(middleware.AuthMiddleware(cfg))
 			adminOrders.Use(middleware.RequireAdmin())
@@ -296,10 +304,8 @@ func setupRoutes(
 		// Discount Code routes
 		discounts := v1.Group("/discounts")
 		{
-			// Public route (validate discount code)
 			discounts.POST("/validate", discountHandler.ValidateDiscountCode)
 
-			// Admin only routes
 			adminDiscounts := discounts.Group("")
 			adminDiscounts.Use(middleware.AuthMiddleware(cfg))
 			adminDiscounts.Use(middleware.RequireAdmin())
@@ -315,10 +321,8 @@ func setupRoutes(
 		// Review routes
 		reviews := v1.Group("/reviews")
 		{
-			// Public route (create review)
 			reviews.POST("", reviewHandler.CreateReview)
 
-			// Admin only routes
 			adminReviews := reviews.Group("")
 			adminReviews.Use(middleware.AuthMiddleware(cfg))
 			adminReviews.Use(middleware.RequireAdmin())
@@ -330,18 +334,15 @@ func setupRoutes(
 			}
 		}
 
-		// Product reviews (public)
 		products.GET("/:id/reviews", reviewHandler.GetProductReviews)
 
 		// Location routes
 		locations := v1.Group("/locations")
 		{
-			// Public routes
 			locations.GET("", locationHandler.GetActiveLocations)
 			locations.GET("/all", locationHandler.GetAllLocations)
 			locations.GET("/:id", locationHandler.GetLocation)
 
-			// Admin only routes
 			adminLocations := locations.Group("")
 			adminLocations.Use(middleware.AuthMiddleware(cfg))
 			adminLocations.Use(middleware.RequireAdmin())
@@ -355,12 +356,10 @@ func setupRoutes(
 		// Gallery routes
 		gallery := v1.Group("/gallery")
 		{
-			// Public routes
 			gallery.GET("/active", galleryHandler.GetActiveImages)
 			gallery.GET("/type/:type", galleryHandler.GetImagesByType)
 			gallery.GET("/:id", galleryHandler.GetImage)
 
-			// Admin only routes
 			adminGallery := gallery.Group("")
 			adminGallery.Use(middleware.AuthMiddleware(cfg))
 			adminGallery.Use(middleware.RequireAdmin())
@@ -373,14 +372,12 @@ func setupRoutes(
 			}
 		}
 
-		// Site Config routes (carousel, etc.)
+		// Site Config routes
 		siteConfig := v1.Group("/config")
 		{
-			// Public: obtener carrusel y about us
 			siteConfig.GET("/carousel", siteConfigHandler.GetCarousel)
 			siteConfig.GET("/about", siteConfigHandler.GetAboutUs)
 
-			// Admin: actualizar carrusel y about us
 			adminConfig := siteConfig.Group("")
 			adminConfig.Use(middleware.AuthMiddleware(cfg))
 			adminConfig.Use(middleware.RequireAdmin())
@@ -400,6 +397,22 @@ func setupRoutes(
 			cart.DELETE("/items/:productId", cartHandler.RemoveItem)
 			cart.DELETE("", cartHandler.ClearCart)
 			cart.POST("/sync", cartHandler.SyncCart)
+		}
+
+		// ✅ NEW: Wompi payment routes
+		payments := v1.Group("/payments")
+		{
+			wompi := payments.Group("/wompi")
+			{
+				// Genera firma de integridad (llamada desde el frontend antes de mostrar el widget)
+				wompi.POST("/signature", wompiHandler.GenerateSignature)
+
+				// Consulta estado de una transacción (llamada desde PaymentSuccess page)
+				wompi.GET("/transaction/:id", wompiHandler.GetTransaction)
+
+				// Webhook de Wompi — sin auth, Wompi llama directo a este endpoint
+				wompi.POST("/webhook", wompiHandler.HandleWebhook)
+			}
 		}
 
 		// Dashboard routes (admin only)
