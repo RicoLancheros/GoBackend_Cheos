@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/cheoscafe/backend/internal/config"
@@ -78,8 +79,11 @@ func (s *PasswordResetService) ForgotPassword(ctx context.Context, email string)
 	// Enviar email en goroutine (no bloquear la respuesta HTTP)
 	// Si el email falla, el usuario puede reintentar pidiendo otro token
 	go func() {
+		log.Printf("[RESET] Iniciando envio de email a %s...", user.Email)
 		if err := s.emailService.SendPasswordResetEmail(user.Email, user.Name, token); err != nil {
-			fmt.Printf("ERROR enviando email de reset a %s: %v\n", user.Email, err)
+			log.Printf("[RESET] ERROR enviando email a %s: %v", user.Email, err)
+		} else {
+			log.Printf("[RESET] Email enviado exitosamente a %s", user.Email)
 		}
 	}()
 
@@ -132,7 +136,7 @@ func (s *PasswordResetService) ResetPassword(ctx context.Context, token string, 
 	// 8. Eliminar el token de Firestore (hard delete, un solo uso)
 	if err := s.resetRepo.Delete(ctx, resetDoc.ID); err != nil {
 		// Log del error pero no fallar - la contrasena ya fue actualizada
-		fmt.Printf("advertencia: error eliminando token de reset %s: %v\n", resetDoc.ID, err)
+		log.Printf("[RESET] advertencia: error eliminando token de reset %s: %v", resetDoc.ID, err)
 	}
 
 	return nil

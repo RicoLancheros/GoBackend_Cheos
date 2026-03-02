@@ -3,9 +3,11 @@ package services
 import (
 	"crypto/tls"
 	"fmt"
+	"log"
 	"net"
 	"net/smtp"
 	"strings"
+	"time"
 )
 
 type EmailService struct {
@@ -17,6 +19,7 @@ type EmailService struct {
 }
 
 func NewEmailService(host, port, email, password, frontendURL string) *EmailService {
+	log.Printf("[EMAIL] Servicio inicializado: host=%s, port=%s, email=%s, frontendURL=%s", host, port, email, frontendURL)
 	return &EmailService{
 		host:        host,
 		port:        port,
@@ -28,14 +31,14 @@ func NewEmailService(host, port, email, password, frontendURL string) *EmailServ
 
 // SendPasswordResetEmail envia un correo con el enlace para restablecer la contrasena
 func (s *EmailService) SendPasswordResetEmail(toEmail, toName, resetToken string) error {
+	log.Printf("[EMAIL] Intentando enviar email de reset a: %s", toEmail)
+
 	resetURL := s.frontendURL + "/reset-password?token=" + resetToken
 
-	// Construir body HTML usando el template
 	body := passwordResetTemplate
 	body = strings.ReplaceAll(body, "{NOMBRE}", toName)
 	body = strings.ReplaceAll(body, "{RESET_URL}", resetURL)
 
-	// Construir mensaje MIME completo
 	message := fmt.Sprintf(
 		"From: Cheos Cafe <%s>\r\n"+
 			"To: %s\r\n"+
@@ -47,123 +50,125 @@ func (s *EmailService) SendPasswordResetEmail(toEmail, toName, resetToken string
 		s.email, toEmail, body,
 	)
 
-	// Intentar primero con TLS directo (puerto 465), luego STARTTLS (puerto 587)
+	// Intentar TLS directo (puerto 465)
+	log.Printf("[EMAIL] Intentando TLS directo (puerto 465)...")
 	err := s.sendWithTLS(toEmail, message)
 	if err != nil {
-		fmt.Printf("TLS directo fallo: %v, intentando STARTTLS...\n", err)
+		log.Printf("[EMAIL] TLS directo FALLO: %v", err)
+
+		// Intentar STARTTLS (puerto 587)
+		log.Printf("[EMAIL] Intentando STARTTLS (puerto %s)...", s.port)
 		err = s.sendWithSTARTTLS(toEmail, message)
+		if err != nil {
+			log.Printf("[EMAIL] STARTTLS FALLO: %v", err)
+			return fmt.Errorf("ambos metodos fallaron - TLS y STARTTLS: %w", err)
+		}
 	}
 
-	if err != nil {
-		return fmt.Errorf("error enviando email de reset: %w", err)
-	}
-
+	log.Printf("[EMAIL] Email enviado exitosamente a: %s", toEmail)
 	return nil
 }
 
-// sendWithTLS usa conexion TLS directa (puerto 465) - funciona en la mayoria de cloud providers
+// sendWithTLS usa conexion TLS directa (puerto 465)
 func (s *EmailService) sendWithTLS(toEmail, message string) error {
 	addr := s.host + ":465"
 
-	tlsConfig := &tls.Config{
-		ServerName: s.host,
-	}
+	// Timeout de 10 segundos para la conexion
+	dialer := &net.Dialer{Timeout: 10 * time.Second}
+	tlsConfig := &tls.Config{ServerName: s.host}
 
-	conn, err := tls.Dial("tcp", addr, tlsConfig)
+	conn, err := tls.DialWithDialer(dialer, "tcp", addr, tlsConfig)
 	if err != nil {
-		return fmt.Errorf("error conectando TLS a %s: %w", addr, err)
+		return fmt.Errorf("conexion TLS a %s: %w", addr, err)
 	}
 	defer conn.Close()
 
+	// Timeout de 10 segundos para operaciones SMTP
+	conn.SetDeadline(time.Now().Add(10 * time.Second))
+
 	client, err := smtp.NewClient(conn, s.host)
 	if err != nil {
-		return fmt.Errorf("error creando cliente SMTP: %w", err)
+		return fmt.Errorf("cliente SMTP: %w", err)
 	}
 	defer client.Quit()
 
 	auth := smtp.PlainAuth("", s.email, s.password, s.host)
 	if err := client.Auth(auth); err != nil {
-		return fmt.Errorf("error autenticando: %w", err)
+		return fmt.Errorf("autenticacion: %w", err)
 	}
 
 	if err := client.Mail(s.email); err != nil {
-		return fmt.Errorf("error MAIL FROM: %w", err)
+		return fmt.Errorf("MAIL FROM: %w", err)
 	}
-
 	if err := client.Rcpt(toEmail); err != nil {
-		return fmt.Errorf("error RCPT TO: %w", err)
+		return fmt.Errorf("RCPT TO: %w", err)
 	}
 
 	w, err := client.Data()
 	if err != nil {
-		return fmt.Errorf("error DATA: %w", err)
+		return fmt.Errorf("DATA: %w", err)
 	}
-
 	if _, err := w.Write([]byte(message)); err != nil {
-		return fmt.Errorf("error escribiendo mensaje: %w", err)
+		return fmt.Errorf("escribiendo mensaje: %w", err)
 	}
-
 	if err := w.Close(); err != nil {
-		return fmt.Errorf("error cerrando writer: %w", err)
+		return fmt.Errorf("cerrando writer: %w", err)
 	}
 
 	return nil
 }
 
-// sendWithSTARTTLS usa STARTTLS (puerto 587) - funciona en local y algunos providers
+// sendWithSTARTTLS usa STARTTLS (puerto 587)
 func (s *EmailService) sendWithSTARTTLS(toEmail, message string) error {
 	addr := s.host + ":" + s.port
 
-	conn, err := net.Dial("tcp", addr)
+	// Timeout de 10 segundos para la conexion
+	conn, err := net.DialTimeout("tcp", addr, 10*time.Second)
 	if err != nil {
-		return fmt.Errorf("error conectando a %s: %w", addr, err)
+		return fmt.Errorf("conexion a %s: %w", addr, err)
 	}
+
+	// Timeout de 10 segundos para operaciones SMTP
+	conn.SetDeadline(time.Now().Add(10 * time.Second))
 
 	client, err := smtp.NewClient(conn, s.host)
 	if err != nil {
 		conn.Close()
-		return fmt.Errorf("error creando cliente SMTP: %w", err)
+		return fmt.Errorf("cliente SMTP: %w", err)
 	}
 	defer client.Quit()
 
-	tlsConfig := &tls.Config{
-		ServerName: s.host,
-	}
-
+	tlsConfig := &tls.Config{ServerName: s.host}
 	if err := client.StartTLS(tlsConfig); err != nil {
-		return fmt.Errorf("error STARTTLS: %w", err)
+		return fmt.Errorf("STARTTLS: %w", err)
 	}
 
 	auth := smtp.PlainAuth("", s.email, s.password, s.host)
 	if err := client.Auth(auth); err != nil {
-		return fmt.Errorf("error autenticando: %w", err)
+		return fmt.Errorf("autenticacion: %w", err)
 	}
 
 	if err := client.Mail(s.email); err != nil {
-		return fmt.Errorf("error MAIL FROM: %w", err)
+		return fmt.Errorf("MAIL FROM: %w", err)
 	}
-
 	if err := client.Rcpt(toEmail); err != nil {
-		return fmt.Errorf("error RCPT TO: %w", err)
+		return fmt.Errorf("RCPT TO: %w", err)
 	}
 
 	w, err := client.Data()
 	if err != nil {
-		return fmt.Errorf("error DATA: %w", err)
+		return fmt.Errorf("DATA: %w", err)
 	}
-
 	if _, err := w.Write([]byte(message)); err != nil {
-		return fmt.Errorf("error escribiendo mensaje: %w", err)
+		return fmt.Errorf("escribiendo mensaje: %w", err)
 	}
-
 	if err := w.Close(); err != nil {
-		return fmt.Errorf("error cerrando writer: %w", err)
+		return fmt.Errorf("cerrando writer: %w", err)
 	}
 
 	return nil
 }
 
-// Template HTML del email de reset de contrasena
 const passwordResetTemplate = `<!DOCTYPE html>
 <html>
 <head>
