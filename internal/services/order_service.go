@@ -12,11 +12,12 @@ import (
 )
 
 type OrderService struct {
-	orderRepo        *repository.OrderRepository
-	productRepo      *repository.ProductRepository
-	cartRepo         *repository.CartRepository
-	dashboardService *DashboardService
-	discountService  *DiscountService // FIX: inyectado
+	orderRepo           *repository.OrderRepository
+	productRepo         *repository.ProductRepository
+	cartRepo            *repository.CartRepository
+	dashboardService    *DashboardService
+	discountService     *DiscountService
+	notificationService *NotificationService
 }
 
 func NewOrderService(
@@ -24,18 +25,20 @@ func NewOrderService(
 	productRepo *repository.ProductRepository,
 	cartRepo *repository.CartRepository,
 	dashboardService *DashboardService,
-	discountService *DiscountService, // FIX: nuevo parámetro
+	discountService *DiscountService,
+	notificationService *NotificationService,
 ) *OrderService {
 	return &OrderService{
-		orderRepo:        orderRepo,
-		productRepo:      productRepo,
-		cartRepo:         cartRepo,
-		dashboardService: dashboardService,
-		discountService:  discountService,
+		orderRepo:           orderRepo,
+		productRepo:         productRepo,
+		cartRepo:            cartRepo,
+		dashboardService:    dashboardService,
+		discountService:     discountService,
+		notificationService: notificationService,
 	}
 }
 
-// CreateOrder crea una nueva orden y descuenta el stock al confirmarla.
+// CreateOrder crea una nueva orden y descuenta el stock
 func (s *OrderService) CreateOrder(ctx context.Context, req *models.CreateOrderRequest, userID *uuid.UUID) (*models.OrderWithItems, error) {
 	if len(req.Items) == 0 {
 		return nil, errors.New("la orden debe tener al menos un producto")
@@ -49,14 +52,11 @@ func (s *OrderService) CreateOrder(ctx context.Context, req *models.CreateOrderR
 		if err != nil {
 			return nil, fmt.Errorf("producto %s no encontrado", itemReq.ProductID)
 		}
-
 		if product.Stock < itemReq.Quantity {
 			return nil, fmt.Errorf("el producto %s no está disponible", product.Name)
 		}
-
 		itemSubtotal := product.Price * float64(itemReq.Quantity)
 		subtotal += itemSubtotal
-
 		orderItems = append(orderItems, models.OrderItem{
 			ProductID:   product.ID,
 			ProductName: product.Name,
@@ -66,7 +66,6 @@ func (s *OrderService) CreateOrder(ctx context.Context, req *models.CreateOrderR
 		})
 	}
 
-	// FIX: validar y aplicar código de descuento si viene en el request
 	discount := 0.0
 	var discountCodeID *uuid.UUID
 
@@ -81,11 +80,8 @@ func (s *OrderService) CreateOrder(ctx context.Context, req *models.CreateOrderR
 		if !validation.Valid {
 			return nil, fmt.Errorf("código de descuento inválido: %s", validation.Message)
 		}
-
 		discount = validation.DiscountAmount
 		discountCodeID = &validation.DiscountCode.ID
-
-		// Marcar el código como usado
 		if err := s.discountService.ApplyDiscountCode(ctx, validation.DiscountCode.ID); err != nil {
 			return nil, fmt.Errorf("error al aplicar código de descuento: %w", err)
 		}
@@ -111,8 +107,7 @@ func (s *OrderService) CreateOrder(ctx context.Context, req *models.CreateOrderR
 		UTMCampaign:     req.UTMCampaign,
 	}
 
-	err := s.orderRepo.Create(ctx, order)
-	if err != nil {
+	if err := s.orderRepo.Create(ctx, order); err != nil {
 		return nil, err
 	}
 
@@ -123,7 +118,6 @@ func (s *OrderService) CreateOrder(ctx context.Context, req *models.CreateOrderR
 			return nil, err
 		}
 		savedItems = append(savedItems, item)
-
 		if err := s.productRepo.UpdateStock(ctx, item.ProductID, -item.Quantity); err != nil {
 			return nil, fmt.Errorf("error al actualizar stock: %v", err)
 		}
@@ -139,10 +133,7 @@ func (s *OrderService) CreateOrder(ctx context.Context, req *models.CreateOrderR
 		}
 	}
 
-	return &models.OrderWithItems{
-		Order: *order,
-		Items: savedItems,
-	}, nil
+	return &models.OrderWithItems{Order: *order, Items: savedItems}, nil
 }
 
 // GetOrderByID obtiene una orden por ID con sus items
@@ -151,21 +142,15 @@ func (s *OrderService) GetOrderByID(ctx context.Context, id uuid.UUID) (*models.
 	if err != nil {
 		return nil, err
 	}
-
 	items, err := s.orderRepo.GetItemsByOrderID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-
-	var itemsList []models.OrderItem
+	list := make([]models.OrderItem, 0, len(items))
 	for _, item := range items {
-		itemsList = append(itemsList, *item)
+		list = append(list, *item)
 	}
-
-	return &models.OrderWithItems{
-		Order: *order,
-		Items: itemsList,
-	}, nil
+	return &models.OrderWithItems{Order: *order, Items: list}, nil
 }
 
 // GetOrderByOrderNumber obtiene una orden por número de orden
@@ -174,24 +159,18 @@ func (s *OrderService) GetOrderByOrderNumber(ctx context.Context, orderNumber st
 	if err != nil {
 		return nil, err
 	}
-
 	items, err := s.orderRepo.GetItemsByOrderID(ctx, order.ID)
 	if err != nil {
 		return nil, err
 	}
-
-	var itemsList []models.OrderItem
+	list := make([]models.OrderItem, 0, len(items))
 	for _, item := range items {
-		itemsList = append(itemsList, *item)
+		list = append(list, *item)
 	}
-
-	return &models.OrderWithItems{
-		Order: *order,
-		Items: itemsList,
-	}, nil
+	return &models.OrderWithItems{Order: *order, Items: list}, nil
 }
 
-// GetUserOrders obtiene las órdenes de un usuario
+// GetUserOrders obtiene las órdenes de un usuario paginadas
 func (s *OrderService) GetUserOrders(ctx context.Context, userID uuid.UUID, page int, pageSize int) (*models.OrderListResponse, error) {
 	if page < 1 {
 		page = 1
@@ -199,31 +178,25 @@ func (s *OrderService) GetUserOrders(ctx context.Context, userID uuid.UUID, page
 	if pageSize < 1 || pageSize > 100 {
 		pageSize = 10
 	}
-
 	offset := (page - 1) * pageSize
-
 	orders, err := s.orderRepo.GetByUserID(ctx, userID, pageSize, offset)
 	if err != nil {
 		return nil, err
 	}
-
 	total, err := s.orderRepo.CountOrdersByUserID(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
-
 	totalPages := int(total) / pageSize
 	if int(total)%pageSize != 0 {
 		totalPages++
 	}
-
-	var ordersList []models.Order
-	for _, order := range orders {
-		ordersList = append(ordersList, *order)
+	list := make([]models.Order, 0, len(orders))
+	for _, o := range orders {
+		list = append(list, *o)
 	}
-
 	return &models.OrderListResponse{
-		Orders:     ordersList,
+		Orders:     list,
 		Total:      int(total),
 		Page:       page,
 		PageSize:   pageSize,
@@ -231,7 +204,7 @@ func (s *OrderService) GetUserOrders(ctx context.Context, userID uuid.UUID, page
 	}, nil
 }
 
-// GetAllOrders obtiene todas las órdenes (solo admin)
+// GetAllOrders obtiene todas las órdenes (solo admin) con filtro por grupo de estado
 func (s *OrderService) GetAllOrders(ctx context.Context, page int, pageSize int, statusGroup string) (*models.OrderListResponse, error) {
 	if page < 1 {
 		page = 1
@@ -239,7 +212,6 @@ func (s *OrderService) GetAllOrders(ctx context.Context, page int, pageSize int,
 	if pageSize < 1 || pageSize > 500 {
 		pageSize = 10
 	}
-
 	allOrders, err := s.orderRepo.GetAllUnpaginated(ctx)
 	if err != nil {
 		return nil, err
@@ -268,7 +240,6 @@ func (s *OrderService) GetAllOrders(ctx context.Context, page int, pageSize int,
 	}
 
 	total := len(filtered)
-
 	offset := (page - 1) * pageSize
 	if offset > total {
 		offset = total
@@ -278,7 +249,6 @@ func (s *OrderService) GetAllOrders(ctx context.Context, page int, pageSize int,
 		end = total
 	}
 	paginated := filtered[offset:end]
-
 	totalPages := total / pageSize
 	if total%pageSize != 0 {
 		totalPages++
@@ -296,27 +266,30 @@ func (s *OrderService) GetAllOrders(ctx context.Context, page int, pageSize int,
 	}, nil
 }
 
-// UpdateOrderStatus actualiza el estado de una orden
+// UpdateOrderStatus actualiza el estado de una orden y crea la notificación correspondiente
 func (s *OrderService) UpdateOrderStatus(ctx context.Context, id uuid.UUID, req *models.UpdateOrderStatusRequest) (*models.Order, error) {
+	// 1. Obtener la orden actual
 	order, err := s.orderRepo.GetByID(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 
+	// 2. Validar transición
 	if !s.isValidStatusTransition(order.Status, req.Status) {
 		return nil, fmt.Errorf("transición de estado inválida de %s a %s", order.Status, req.Status)
 	}
 
+	// 3. Persistir nuevo estado
 	if err := s.orderRepo.UpdateStatus(ctx, id, req.Status); err != nil {
 		return nil, err
 	}
 
+	// 4. Devolver stock si se cancela
 	if req.Status == models.OrderCancelled {
 		items, err := s.orderRepo.GetItemsByOrderID(ctx, id)
 		if err != nil {
 			return nil, err
 		}
-
 		for _, item := range items {
 			if err := s.productRepo.UpdateStock(ctx, item.ProductID, item.Quantity); err != nil {
 				return nil, fmt.Errorf("error al devolver stock: %v", err)
@@ -324,16 +297,27 @@ func (s *OrderService) UpdateOrderStatus(ctx context.Context, id uuid.UUID, req 
 		}
 	}
 
+	// 5. Asignar nuevo estado en memoria para la notificación
+	//    (no volvemos a leer de Firestore para no hacer un round-trip extra)
+	order.Status = req.Status
+
+	// 6. Crear notificación — ya tiene el nuevo status asignado
+	if s.notificationService != nil {
+		s.notificationService.CreateOrderStatusNotification(ctx, order, req.Status)
+	}
+
+	// 7. Actualizar métricas de dashboard
 	if s.dashboardService != nil {
 		if err := s.dashboardService.OnOrderStatusChanged(ctx, order, order.Status, req.Status); err != nil {
 			log.Printf("Error actualizando metricas de dashboard: %v", err)
 		}
 	}
 
+	// 8. Retornar la orden fresca desde Firestore
 	return s.orderRepo.GetByID(ctx, id)
 }
 
-// UpdatePaymentStatus actualiza el estado de pago
+// UpdatePaymentStatus actualiza el estado de pago y confirma la orden si aplica
 func (s *OrderService) UpdatePaymentStatus(ctx context.Context, id uuid.UUID, req *models.UpdatePaymentStatusRequest) (*models.Order, error) {
 	order, err := s.orderRepo.GetByID(ctx, id)
 	if err != nil {
@@ -344,16 +328,22 @@ func (s *OrderService) UpdatePaymentStatus(ctx context.Context, id uuid.UUID, re
 		return nil, err
 	}
 
+	// Pago aprobado + orden pendiente → confirmar automáticamente y notificar
 	if req.PaymentStatus == models.PaymentApproved && order.Status == models.OrderPending {
 		if err := s.orderRepo.UpdateStatus(ctx, id, models.OrderConfirmed); err != nil {
 			return nil, err
+		}
+		order.Status = models.OrderConfirmed
+
+		if s.notificationService != nil {
+			s.notificationService.CreateOrderStatusNotification(ctx, order, models.OrderConfirmed)
 		}
 	}
 
 	return s.orderRepo.GetByID(ctx, id)
 }
 
-// isValidStatusTransition valida si la transición de estado es válida
+// isValidStatusTransition valida si la transición de estado es permitida
 func (s *OrderService) isValidStatusTransition(from models.OrderStatus, to models.OrderStatus) bool {
 	validTransitions := map[models.OrderStatus][]models.OrderStatus{
 		models.OrderPending:    {models.OrderConfirmed, models.OrderCancelled},
@@ -363,17 +353,14 @@ func (s *OrderService) isValidStatusTransition(from models.OrderStatus, to model
 		models.OrderDelivered:  {},
 		models.OrderCancelled:  {},
 	}
-
 	allowed, exists := validTransitions[from]
 	if !exists {
 		return false
 	}
-
 	for _, a := range allowed {
 		if a == to {
 			return true
 		}
 	}
-
 	return false
 }

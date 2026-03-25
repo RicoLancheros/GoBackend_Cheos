@@ -61,7 +61,7 @@ func main() {
 	}
 	logger.Info("Firebase connected successfully")
 
-	// Initialize repositories
+	// ── Initialize repositories ───────────────────────────────────────────────
 	userRepo := repository.NewUserRepository(firebaseClient)
 	productRepo := repository.NewProductRepository(firebaseClient)
 	orderRepo := repository.NewOrderRepository(firebaseClient)
@@ -72,11 +72,14 @@ func main() {
 	siteConfigRepo := repository.NewSiteConfigRepository(firebaseClient)
 	cartRepo := repository.NewCartRepository(firebaseClient)
 	passwordResetRepo := repository.NewPasswordResetRepository(firebaseClient)
-
-	// Initialize repositories (dashboard)
 	dashboardRepo := repository.NewDashboardRepository(firebaseClient)
+	notificationRepo := repository.NewNotificationRepository(firebaseClient)
 
-	// Initialize services
+	// ── SSE Hub ───────────────────────────────────────────────────────────────
+	// Se crea antes que los services para poder inyectarlo en notificationService
+	sseHub := handlers.NewSSEHub()
+
+	// ── Initialize services ───────────────────────────────────────────────────
 	authService := services.NewAuthService(userRepo, cfg)
 	emailService := services.NewEmailService(services.EmailConfig{
 		SMTPHost:     cfg.SMTPHost,
@@ -92,13 +95,19 @@ func main() {
 	cartService := services.NewCartService(cartRepo, productRepo)
 	dashboardService := services.NewDashboardService(dashboardRepo, orderRepo, userRepo)
 	discountService := services.NewDiscountService(discountRepo)
-	orderService := services.NewOrderService(orderRepo, productRepo, cartRepo, dashboardService, discountService)
+	notificationService := services.NewNotificationService(notificationRepo, sseHub) // ← sseHub inyectado
+	orderService := services.NewOrderService(
+		orderRepo,
+		productRepo,
+		cartRepo,
+		dashboardService,
+		discountService,
+		notificationService,
+	)
 	reviewService := services.NewReviewService(reviewRepo, productRepo)
 	locationService := services.NewLocationService(locationRepo)
 	galleryService := services.NewGalleryService(galleryRepo)
 	siteConfigService := services.NewSiteConfigService(siteConfigRepo)
-
-	// ✅ NEW: Initialize Wompi service
 	wompiService := services.NewWompiService()
 
 	// Initialize upload service (Cloudinary)
@@ -108,7 +117,7 @@ func main() {
 		uploadService = nil
 	}
 
-	// Initialize handlers
+	// ── Initialize handlers ───────────────────────────────────────────────────
 	authHandler := handlers.NewAuthHandler(authService, passwordResetService)
 	productHandler := handlers.NewProductHandler(productService)
 	orderHandler := handlers.NewOrderHandler(orderService)
@@ -119,11 +128,10 @@ func main() {
 	siteConfigHandler := handlers.NewSiteConfigHandler(siteConfigService)
 	cartHandler := handlers.NewCartHandler(cartService)
 	dashboardHandler := handlers.NewDashboardHandler(dashboardService)
-
-	// ✅ NEW: Initialize Wompi handler
 	wompiHandler := handlers.NewWompiHandler(wompiService)
+	notificationHandler := handlers.NewNotificationHandler(notificationService, sseHub) // ← sseHub inyectado
 
-	// Initialize Gin router
+	// ── Initialize Gin router ─────────────────────────────────────────────────
 	router := gin.Default()
 
 	// Apply CORS middleware
@@ -139,16 +147,17 @@ func main() {
 		authHandler, productHandler, orderHandler, discountHandler,
 		reviewHandler, locationHandler, galleryHandler, siteConfigHandler,
 		cartHandler, dashboardHandler,
-		wompiHandler, // ✅ NEW
+		wompiHandler,
+		notificationHandler,
 		logger,
 	)
 
-	// Create HTTP server
+	// ── Create HTTP server ────────────────────────────────────────────────────
 	srv := &http.Server{
 		Addr:         fmt.Sprintf(":%s", cfg.Port),
 		Handler:      router,
 		ReadTimeout:  15 * time.Second,
-		WriteTimeout: 15 * time.Second,
+		WriteTimeout: 0, // 0 = sin timeout — necesario para conexiones SSE de larga duración
 		IdleTimeout:  60 * time.Second,
 	}
 
@@ -162,14 +171,13 @@ func main() {
 		}
 	}()
 
-	// Wait for interrupt signal to gracefully shutdown the server
+	// Wait for interrupt signal to gracefully shutdown
 	quit := make(chan os.Signal, 1)
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	<-quit
 
 	logger.Info("Shutting down server...")
 
-	// Graceful shutdown with 5 second timeout
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
@@ -195,10 +203,11 @@ func setupRoutes(
 	siteConfigHandler *handlers.SiteConfigHandler,
 	cartHandler *handlers.CartHandler,
 	dashboardHandler *handlers.DashboardHandler,
-	wompiHandler *handlers.WompiHandler, // ✅ NEW
+	wompiHandler *handlers.WompiHandler,
+	notificationHandler *handlers.NotificationHandler,
 	logger *logrus.Logger,
 ) {
-	// Health check endpoints
+	// ── Health checks ─────────────────────────────────────────────────────────
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{
 			"status":  "ok",
@@ -209,43 +218,28 @@ func setupRoutes(
 
 	router.GET("/health/firebase", func(c *gin.Context) {
 		if firebaseClient.Firestore == nil {
-			c.JSON(http.StatusServiceUnavailable, gin.H{
-				"status":  "error",
-				"message": "Firebase connection failed",
-			})
+			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "error", "message": "Firebase connection failed"})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{
-			"status":  "ok",
-			"message": "Firebase is healthy",
-		})
+		c.JSON(http.StatusOK, gin.H{"status": "ok", "message": "Firebase is healthy"})
 	})
 
 	router.GET("/health/redis", func(c *gin.Context) {
 		if redis == nil {
-			c.JSON(http.StatusServiceUnavailable, gin.H{
-				"status":  "error",
-				"message": "Redis not configured",
-			})
+			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "error", "message": "Redis not configured"})
 			return
 		}
 		if err := redis.Ping(context.Background()); err != nil {
-			c.JSON(http.StatusServiceUnavailable, gin.H{
-				"status":  "error",
-				"message": "Redis connection failed",
-			})
+			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "error", "message": "Redis connection failed"})
 			return
 		}
-		c.JSON(http.StatusOK, gin.H{
-			"status":  "ok",
-			"message": "Redis is healthy",
-		})
+		c.JSON(http.StatusOK, gin.H{"status": "ok", "message": "Redis is healthy"})
 	})
 
-	// API v1 routes
+	// ── API v1 ────────────────────────────────────────────────────────────────
 	v1 := router.Group(fmt.Sprintf("/api/%s", cfg.APIVersion))
 	{
-		// Authentication routes (public)
+		// ── Auth (public) ─────────────────────────────────────────────────────
 		auth := v1.Group("/auth")
 		{
 			auth.POST("/register", authHandler.Register)
@@ -256,7 +250,7 @@ func setupRoutes(
 			auth.POST("/reset-password", authHandler.ResetPassword)
 		}
 
-		// User profile routes (protected)
+		// ── Users (protected) ─────────────────────────────────────────────────
 		users := v1.Group("/users")
 		users.Use(middleware.AuthMiddleware(cfg))
 		{
@@ -272,7 +266,7 @@ func setupRoutes(
 			}
 		}
 
-		// Product routes (public read, admin write)
+		// ── Products ──────────────────────────────────────────────────────────
 		products := v1.Group("/products")
 		{
 			products.GET("", productHandler.GetAllProducts)
@@ -291,10 +285,10 @@ func setupRoutes(
 			}
 		}
 
-		// Order routes
+		// ── Orders ────────────────────────────────────────────────────────────
 		orders := v1.Group("/orders")
 		{
-			orders.POST("", orderHandler.CreateOrder)
+			orders.POST("", middleware.OptionalAuth(cfg), orderHandler.CreateOrder)
 			orders.GET("/number/:number", orderHandler.GetOrderByNumber)
 
 			userOrders := orders.Group("")
@@ -314,7 +308,7 @@ func setupRoutes(
 			}
 		}
 
-		// Discount Code routes
+		// ── Discounts ─────────────────────────────────────────────────────────
 		discounts := v1.Group("/discounts")
 		{
 			discounts.POST("/validate", discountHandler.ValidateDiscountCode)
@@ -331,7 +325,7 @@ func setupRoutes(
 			}
 		}
 
-		// Review routes
+		// ── Reviews ───────────────────────────────────────────────────────────
 		reviews := v1.Group("/reviews")
 		{
 			reviews.POST("", reviewHandler.CreateReview)
@@ -349,7 +343,7 @@ func setupRoutes(
 
 		products.GET("/:id/reviews", reviewHandler.GetProductReviews)
 
-		// Location routes
+		// ── Locations ─────────────────────────────────────────────────────────
 		locations := v1.Group("/locations")
 		{
 			locations.GET("", locationHandler.GetActiveLocations)
@@ -366,7 +360,7 @@ func setupRoutes(
 			}
 		}
 
-		// Gallery routes
+		// ── Gallery ───────────────────────────────────────────────────────────
 		gallery := v1.Group("/gallery")
 		{
 			gallery.GET("/active", galleryHandler.GetActiveImages)
@@ -385,7 +379,7 @@ func setupRoutes(
 			}
 		}
 
-		// Site Config routes
+		// ── Site Config ───────────────────────────────────────────────────────
 		siteConfig := v1.Group("/config")
 		{
 			siteConfig.GET("/carousel", siteConfigHandler.GetCarousel)
@@ -400,7 +394,7 @@ func setupRoutes(
 			}
 		}
 
-		// Cart routes (authenticated users only)
+		// ── Cart ──────────────────────────────────────────────────────────────
 		cart := v1.Group("/cart")
 		cart.Use(middleware.AuthMiddleware(cfg))
 		{
@@ -412,23 +406,28 @@ func setupRoutes(
 			cart.POST("/sync", cartHandler.SyncCart)
 		}
 
-		// ✅ NEW: Wompi payment routes
+		// ── Payments (Wompi) ──────────────────────────────────────────────────
 		payments := v1.Group("/payments")
 		{
 			wompi := payments.Group("/wompi")
 			{
-				// Genera firma de integridad (llamada desde el frontend antes de mostrar el widget)
 				wompi.POST("/signature", wompiHandler.GenerateSignature)
-
-				// Consulta estado de una transacción (llamada desde PaymentSuccess page)
 				wompi.GET("/transaction/:id", wompiHandler.GetTransaction)
-
-				// Webhook de Wompi — sin auth, Wompi llama directo a este endpoint
 				wompi.POST("/webhook", wompiHandler.HandleWebhook)
 			}
 		}
 
-		// Dashboard routes (admin only)
+		// ── Notifications ─────────────────────────────────────────────────────
+		notifications := v1.Group("/notifications")
+		notifications.Use(middleware.AuthMiddleware(cfg))
+		{
+			notifications.GET("", notificationHandler.GetNotifications)
+			notifications.GET("/stream", notificationHandler.StreamNotifications) // ← SSE
+			notifications.PATCH("/read-all", notificationHandler.MarkAllRead)
+			notifications.PATCH("/:id/read", notificationHandler.MarkRead)
+		}
+
+		// ── Dashboard (admin only) ────────────────────────────────────────────
 		dashboard := v1.Group("/dashboard")
 		dashboard.Use(middleware.AuthMiddleware(cfg))
 		dashboard.Use(middleware.RequireAdmin())
@@ -443,11 +442,9 @@ func setupRoutes(
 			dashboard.POST("/recalculate", dashboardHandler.RecalculateMonth)
 		}
 
-		// Test endpoint
+		// ── Ping ──────────────────────────────────────────────────────────────
 		v1.GET("/ping", func(c *gin.Context) {
-			c.JSON(http.StatusOK, gin.H{
-				"message": "pong",
-			})
+			c.JSON(http.StatusOK, gin.H{"message": "pong"})
 		})
 	}
 
