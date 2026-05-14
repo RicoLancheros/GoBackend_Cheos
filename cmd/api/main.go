@@ -138,8 +138,9 @@ func main() {
 	router.Use(middleware.CORS(cfg))
 
 	// Apply rate limiting
-	rateLimitDuration, _ := time.ParseDuration(cfg.RateLimitDuration)
-	router.Use(middleware.RateLimiter(cfg.RateLimitRequests, rateLimitDuration))
+	// TEMPORALMENTE DESHABILITADO para pruebas de límites — reactivar descomentando.
+	// rateLimitDuration, _ := time.ParseDuration(cfg.RateLimitDuration)
+	// router.Use(middleware.RateLimiter(cfg.RateLimitRequests, rateLimitDuration))
 
 	// Setup routes
 	setupRoutes(
@@ -243,7 +244,8 @@ func setupRoutes(
 		auth := v1.Group("/auth")
 		{
 			auth.POST("/register", authHandler.Register)
-			auth.POST("/login", middleware.LoginRateLimiter(), authHandler.Login)
+			// TEMPORALMENTE DESHABILITADO: middleware.LoginRateLimiter() — reactivar para producción.
+			auth.POST("/login", authHandler.Login)
 			auth.POST("/refresh", authHandler.RefreshToken)
 			auth.POST("/logout", authHandler.Logout)
 			auth.POST("/forgot-password", authHandler.ForgotPassword)
