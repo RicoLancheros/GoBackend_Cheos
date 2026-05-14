@@ -14,14 +14,28 @@ import (
 )
 
 type AuthService struct {
-	userRepo *repository.UserRepository
-	cfg      *config.Config
+	userRepo             *repository.UserRepository
+	cfg                  *config.Config
+	accessTokenDuration  time.Duration
+	refreshTokenDuration time.Duration
 }
 
 func NewAuthService(userRepo *repository.UserRepository, cfg *config.Config) *AuthService {
+	// Pre-parsear duraciones una sola vez al startup en lugar de en cada login.
+	accessDur, err := utils.ParseDuration(cfg.JWTExpiresIn)
+	if err != nil {
+		accessDur = 15 * time.Minute
+	}
+	refreshDur, err := utils.ParseDuration(cfg.JWTRefreshExpiresIn)
+	if err != nil {
+		refreshDur = 168 * time.Hour
+	}
+
 	return &AuthService{
-		userRepo: userRepo,
-		cfg:      cfg,
+		userRepo:             userRepo,
+		cfg:                  cfg,
+		accessTokenDuration:  accessDur,
+		refreshTokenDuration: refreshDur,
 	}
 }
 
@@ -68,34 +82,42 @@ func (s *AuthService) Register(ctx context.Context, req *models.RegisterRequest)
 	return user, nil
 }
 
-// Login autentica un usuario
+// Login autentica un usuario.
+// Instrumentado con timing logs para identificar cuellos de botella bajo carga.
+// Pasos: 1) Firestore GetByEmail  2) IsActive check  3) bcrypt compare  4) JWT x2
 func (s *AuthService) Login(ctx context.Context, req *models.LoginRequest) (*models.LoginResponse, error) {
+	start := time.Now()
+	log.Printf("[LOGIN] start email=%s", req.Email)
+
+	// Paso 1: lectura desde Firestore (1 doc via Where+Limit(1))
+	tStep := time.Now()
 	user, err := s.userRepo.GetByEmail(ctx, req.Email)
+	firestoreElapsed := time.Since(tStep)
 	if err != nil {
+		log.Printf("[LOGIN] firestore_fail email=%s firestore=%v total=%v", req.Email, firestoreElapsed, time.Since(start))
 		return nil, errors.New("credenciales inválidas")
 	}
+	log.Printf("[LOGIN] firestore_ok email=%s firestore=%v", req.Email, firestoreElapsed)
 
 	if !user.IsActive {
+		log.Printf("[LOGIN] inactive email=%s total=%v", req.Email, time.Since(start))
 		return nil, errors.New("usuario inactivo")
 	}
 
+	// Paso 2: bcrypt compare — históricamente el bottleneck principal en CPU compartida.
+	tStep = time.Now()
 	if !utils.CheckPassword(req.Password, user.Password) {
+		log.Printf("[LOGIN] bcrypt_fail email=%s bcrypt=%v total=%v", req.Email, time.Since(tStep), time.Since(start))
 		return nil, errors.New("credenciales inválidas")
 	}
+	bcryptElapsed := time.Since(tStep)
+	log.Printf("[LOGIN] bcrypt_ok email=%s bcrypt=%v", req.Email, bcryptElapsed)
 
-	accessTokenDuration, err := utils.ParseDuration(s.cfg.JWTExpiresIn)
-	if err != nil {
-		accessTokenDuration = 15 * time.Minute
-	}
-
-	refreshTokenDuration, err := utils.ParseDuration(s.cfg.JWTRefreshExpiresIn)
-	if err != nil {
-		refreshTokenDuration = 168 * time.Hour
-	}
-
+	// Paso 3: generación de tokens (HS256 — ~µs, no es bottleneck)
+	tStep = time.Now()
 	accessToken, err := utils.GenerateToken(
 		user.ID, user.Email, string(user.Role),
-		s.cfg.JWTSecret, accessTokenDuration,
+		s.cfg.JWTSecret, s.accessTokenDuration,
 	)
 	if err != nil {
 		return nil, err
@@ -103,11 +125,16 @@ func (s *AuthService) Login(ctx context.Context, req *models.LoginRequest) (*mod
 
 	refreshToken, err := utils.GenerateToken(
 		user.ID, user.Email, string(user.Role),
-		s.cfg.JWTRefreshSecret, refreshTokenDuration,
+		s.cfg.JWTRefreshSecret, s.refreshTokenDuration,
 	)
 	if err != nil {
 		return nil, err
 	}
+	jwtElapsed := time.Since(tStep)
+
+	totalElapsed := time.Since(start)
+	log.Printf("[LOGIN] done email=%s total=%v firestore=%v bcrypt=%v jwt=%v",
+		req.Email, totalElapsed, firestoreElapsed, bcryptElapsed, jwtElapsed)
 
 	user.Password = ""
 	return &models.LoginResponse{
@@ -133,14 +160,9 @@ func (s *AuthService) RefreshToken(ctx context.Context, refreshToken string) (st
 		return "", errors.New("usuario inactivo")
 	}
 
-	accessTokenDuration, err := utils.ParseDuration(s.cfg.JWTExpiresIn)
-	if err != nil {
-		accessTokenDuration = 15 * time.Minute
-	}
-
 	return utils.GenerateToken(
 		user.ID, user.Email, string(user.Role),
-		s.cfg.JWTSecret, accessTokenDuration,
+		s.cfg.JWTSecret, s.accessTokenDuration,
 	)
 }
 

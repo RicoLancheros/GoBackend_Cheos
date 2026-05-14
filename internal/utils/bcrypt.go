@@ -4,7 +4,10 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-const bcryptCost = 12
+// bcryptCost: rondas = 2^cost. Cost 10 es el default de golang.org/x/crypto/bcrypt
+// y el mínimo recomendado por OWASP. Cost 12 era ~4x más caro y resultaba
+// inviable en CPU compartida (Render Free 0.1 vCPU → ~2-3s por compare).
+const bcryptCost = 10
 
 // HashPassword hashea una contraseña usando bcrypt
 func HashPassword(password string) (string, error) {
